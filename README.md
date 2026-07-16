@@ -33,3 +33,22 @@ make migrate-down
 ```
 
 Şema taslak — bkz. [migrations/00001_init.sql](migrations/00001_init.sql) başındaki not.
+
+## Branch & PR kuralları
+
+`main` korumalı:
+- Direkt push yok (repo sahibi dahil) — her değişiklik PR ile gelir.
+- Merge öncesi `Build, vet, test` + `golangci-lint` CI kontrolleri yeşil olmalı.
+- Onay (approval) şart değil — CI yeşilse PR sahibi tek başına merge edebilir.
+- Force-push ve branch silme main'de kapalı; linear history zorunlu (merge yalnızca **squash**).
+- PR merge olunca kaynak branch otomatik silinir.
+
+Branch adlandırma, plan görev ID'sine bağlı:
+
+```
+feature/APP-2-trap-provisioning
+fix/OPS-3-ci-gofiles-guard
+chore/OPS-1-repo-scaffold
+```
+
+`APP-*` = Cyber, `OPS-*` = DevOps (bkz. [PROJECT PLAN.md](PROJECT%20PLAN.md) böl. 5-6).
