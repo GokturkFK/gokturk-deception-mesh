@@ -105,6 +105,61 @@ jobs:
             echo "healthcheck calisan server olmadan 0 dondu — beklenmiyor"; exit 1
           fi
           echo "OK: healthcheck server yokken nonzero dondu"
+      - name: Trivy scan (fail on HIGH/CRITICAL, fixli CVE'ler)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: gokturk/control-api:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  publish-control-api:
+    name: Publish control-api (SBOM + sign)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-test, docker-control-api, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/docker/control-api.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/control-api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/control-api:latest
+
+      - name: SBOM (syft, SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/${{ github.repository }}/control-api@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-control-api.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-control-api
+          path: sbom-control-api.spdx.json
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless / OIDC)
+        run: cosign sign --yes "ghcr.io/${{ github.repository }}/control-api@${{ steps.build.outputs.digest }}"
 
   lint:
     name: golangci-lint
