@@ -22,8 +22,8 @@ make docker-up
 Servisler: `control-api`, `sensor-ssh`, `nats`, `postgres`, `dashboard`, `siem-sink`.
 Detay için [deployments/docker/docker-compose.yml](deployments/docker/docker-compose.yml).
 
-> `control-api`, `sensor-ssh` ve `dashboard` için Dockerfile'lar henüz eklenmedi (OPS-5).
-> O ana kadar `make docker-up` sadece `nats` + `postgres` + `siem-sink`'i healthy şekilde ayağa kaldırır.
+> `sensor-ssh` ve `dashboard` için Dockerfile'lar henüz eklenmedi (OPS-5 devam ediyor).
+> Şu an `make docker-up` ile `nats` + `postgres` + `siem-sink` + `control-api` healthy ayağa kalkar.
 
 ## Migration'lar
 

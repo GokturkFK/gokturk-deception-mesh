@@ -1,0 +1,10 @@
+.git
+.github
+.vscode
+.idea
+bundle/
+*.tar
+coverage.txt
+coverage.html
+deployments/docker/.env
+*.md

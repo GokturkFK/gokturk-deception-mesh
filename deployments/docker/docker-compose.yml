@@ -29,8 +29,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # TODO(Cyber, OPS-5): deployments/docker/control-api.Dockerfile henüz yok.
-  # Dockerfile eklenince bu servis buildlenebilir hale gelecek.
   control-api:
     build:
       context: ../../
@@ -48,7 +46,8 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      # distroless image'da wget yok; binary'nin healthcheck alt komutu kullaniliyor.
+      test: ["CMD", "/control-api", "healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10

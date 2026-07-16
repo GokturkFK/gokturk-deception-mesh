@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -53,6 +54,13 @@ func envOrDefault(key, def string) string {
 }
 
 func main() {
+	// Container HEALTHCHECK modu: distroless image'da wget/curl olmadigi icin
+	// ayni binary "healthcheck" arguman ile calistirilir (bkz. control-api.Dockerfile).
+	// Sadece HTTP_ADDR'a ihtiyac duyar, diger env zorunluluklarindan muaf.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck(envOrDefault("HTTP_ADDR", ":8080")))
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	cfg, err := loadConfig()
@@ -103,4 +111,28 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// healthURL, ":8080" veya "0.0.0.0:8080" gibi bir listen adresinden
+// loopback uzerinden erisilebilir healthz URL'i uretir.
+func healthURL(addr string) string {
+	port := addr[strings.LastIndex(addr, ":")+1:]
+	return "http://127.0.0.1:" + port + "/healthz"
+}
+
+func runHealthcheck(addr string) int {
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, healthURL(addr), nil)
+	if err != nil {
+		return 1
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 1
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }
