@@ -52,9 +52,10 @@ services:
       timeout: 3s
       retries: 10
 
-  # TODO(Cyber, OPS-5): deployments/docker/sensor-ssh.Dockerfile henüz yok.
-  # auth.log mount'u Debian/Ubuntu varsayar; APP-4 journald okuyucu olarak yazılırsa
-  # bunun yerine /var/log/journal:/var/log/journal:ro + farklı bir okuma stratejisi gerekir.
+  # TODO(Cyber): cmd/sensor-ssh henuz yazilmadi (APP-4/5) — bu servis su an
+  # buildlenemez. auth.log mount'u Debian/Ubuntu varsayar; APP-4 journald
+  # okuyucu olarak yazılırsa bunun yerine /var/log/journal:/var/log/journal:ro
+  # + farklı bir okuma stratejisi gerekir.
   sensor-ssh:
     build:
       context: ../../
