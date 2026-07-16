@@ -41,6 +41,26 @@ func (s *Store) CreateTrap(ctx context.Context, t trap.Trap) (trap.Trap, error) 
 	return t, nil
 }
 
+// InsertTripEvent, trip'i trip_events tablosuna idempotent yazar: ayni
+// event_id ikinci kez gelirse hic bir sey yazilmaz ve false doner
+// (PLAN APP-6 AC). Raw bos ise '{}' saklanir.
+func (s *Store) InsertTripEvent(ctx context.Context, ev trap.TripEvent) (bool, error) {
+	const q = `
+		INSERT INTO trip_events (event_id, trap_id, sensor, source, observed_at, raw)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb))
+		ON CONFLICT (event_id) DO NOTHING`
+	res, err := s.db.ExecContext(ctx, q,
+		ev.EventID, ev.TrapID, ev.Sensor, ev.Source, ev.ObservedAt, []byte(ev.Raw))
+	if err != nil {
+		return false, fmt.Errorf("store: trip yazilamadi: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("store: etkilenen satir okunamadi: %w", err)
+	}
+	return n == 1, nil
+}
+
 // ListTraps, tuzaklari en yeni once olacak sekilde listeler. secret_hash
 // bilincli olarak secilmez — API cevabina asla cikmamali.
 func (s *Store) ListTraps(ctx context.Context) ([]trap.Trap, error) {

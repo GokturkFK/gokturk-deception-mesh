@@ -14,6 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
+
+	"github.com/GokturkFK/gokturk-deception-mesh/internal/ingest"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/store"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
 )
@@ -98,15 +101,32 @@ func main() {
 	}
 	cancelPing()
 
+	st := store.New(db)
 	api := &apiServer{
 		provider: trap.NewCredentialCanaryProvider([]byte(cfg.hmacKey)),
-		store:    store.New(db),
+		store:    st,
 		logger:   logger,
 	}
 	srv := newServer(cfg, api)
 
+	nc, err := nats.Connect(cfg.natsURL, nats.Name("control-api"))
+	if err != nil {
+		logger.Error("nats'a baglanilamadi", "err", err)
+		os.Exit(1)
+	}
+	defer nc.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	go func() {
+		consumer := ingest.New(st, logger)
+		logger.Info("ingestion consumer basliyor", "subject", trap.SubjectTripEvents)
+		if err := ingest.Run(ctx, nc, consumer); err != nil {
+			logger.Error("ingestion consumer durdu", "err", err)
+			stop() // ingest hattı olmadan calismaya devam etmek sessiz veri kaybi olur
+		}
+	}()
 
 	go func() {
 		logger.Info("control-api dinliyor", "addr", cfg.httpAddr)
