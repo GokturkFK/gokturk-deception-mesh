@@ -15,7 +15,7 @@ func TestLoadConfig_MissingRequired(t *testing.T) {
 func TestLoadConfig_AllPresent(t *testing.T) {
 	t.Setenv("DB_DSN", "postgres://x")
 	t.Setenv("NATS_URL", "nats://x")
-	t.Setenv("HMAC_KEY", "secret")
+	t.Setenv("HMAC_KEY", "0123456789abcdef0123456789abcdef")
 	t.Setenv("HTTP_ADDR", ":9090")
 
 	cfg, err := loadConfig()
@@ -25,7 +25,7 @@ func TestLoadConfig_AllPresent(t *testing.T) {
 	if cfg.httpAddr != ":9090" {
 		t.Errorf("httpAddr = %q, istenen :9090", cfg.httpAddr)
 	}
-	if cfg.dbDSN != "postgres://x" || cfg.natsURL != "nats://x" || cfg.hmacKey != "secret" {
+	if cfg.dbDSN != "postgres://x" || cfg.natsURL != "nats://x" || cfg.hmacKey != "0123456789abcdef0123456789abcdef" {
 		t.Errorf("config degerleri env ile eslesmiyor: %+v", cfg)
 	}
 }
@@ -33,7 +33,7 @@ func TestLoadConfig_AllPresent(t *testing.T) {
 func TestLoadConfig_DefaultHTTPAddr(t *testing.T) {
 	t.Setenv("DB_DSN", "postgres://x")
 	t.Setenv("NATS_URL", "nats://x")
-	t.Setenv("HMAC_KEY", "secret")
+	t.Setenv("HMAC_KEY", "0123456789abcdef0123456789abcdef")
 	t.Setenv("HTTP_ADDR", "")
 
 	cfg, err := loadConfig()
@@ -42,6 +42,16 @@ func TestLoadConfig_DefaultHTTPAddr(t *testing.T) {
 	}
 	if cfg.httpAddr != ":8080" {
 		t.Errorf("varsayilan httpAddr = %q, istenen :8080", cfg.httpAddr)
+	}
+}
+
+func TestLoadConfig_ShortHMACKey(t *testing.T) {
+	t.Setenv("DB_DSN", "postgres://x")
+	t.Setenv("NATS_URL", "nats://x")
+	t.Setenv("HMAC_KEY", "cok-kisa")
+
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("32 bayttan kisa HMAC_KEY reddedilmeliydi")
 	}
 }
 
