@@ -44,3 +44,23 @@ func TestLoadConfig_DefaultHTTPAddr(t *testing.T) {
 		t.Errorf("varsayilan httpAddr = %q, istenen :8080", cfg.httpAddr)
 	}
 }
+
+func TestHealthURL(t *testing.T) {
+	cases := map[string]string{
+		":8080":         "http://127.0.0.1:8080/healthz",
+		"0.0.0.0:9090":  "http://127.0.0.1:9090/healthz",
+		"10.0.0.5:8081": "http://127.0.0.1:8081/healthz",
+	}
+	for addr, want := range cases {
+		if got := healthURL(addr); got != want {
+			t.Errorf("healthURL(%q) = %q, istenen %q", addr, got, want)
+		}
+	}
+}
+
+func TestRunHealthcheck_NoListener(t *testing.T) {
+	// Dinleyen servis yokken healthcheck 1 donmeli.
+	if code := runHealthcheck(":1"); code != 1 {
+		t.Errorf("runHealthcheck(:1) = %d, istenen 1", code)
+	}
+}

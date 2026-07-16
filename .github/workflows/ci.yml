@@ -92,6 +92,20 @@ jobs:
           path: coverage.txt
           if-no-files-found: ignore
 
+  docker-control-api:
+    name: Docker build (control-api)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f deployments/docker/control-api.Dockerfile -t gokturk/control-api:ci .
+      - name: Smoke test (healthcheck subcommand exits nonzero without server)
+        run: |
+          if docker run --rm gokturk/control-api:ci healthcheck; then
+            echo "healthcheck calisan server olmadan 0 dondu — beklenmiyor"; exit 1
+          fi
+          echo "OK: healthcheck server yokken nonzero dondu"
+
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest
