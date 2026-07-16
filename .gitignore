@@ -1,0 +1,36 @@
+# Go
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!deployments/**/*.example.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Air-gapped bundle output (OPS-7)
+/bundle/
+*.tar
+
+# Local compose overrides
+docker-compose.override.yml

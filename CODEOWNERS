@@ -1,0 +1,18 @@
+# Bkz. PROJECT PLAN.md bölüm 5-6 (görev/sahiplik dökümü).
+# TODO: Cyber teknik sahibinin GitHub kullanıcı adını ekleyip @GokturkFK yerine/yanına yaz.
+
+# Varsayılan sahip
+*                           @GokturkFK
+
+# Cyber (güvenlik/backend çekirdeği)
+/cmd/control-api/          @GokturkFK
+/cmd/sensor-ssh/           @GokturkFK
+/internal/trap/            @GokturkFK
+/internal/correlate/       @GokturkFK
+
+# DevOps (platform/teslimat/ops)
+/deployments/              @GokturkFK
+/migrations/                @GokturkFK
+/.github/                  @GokturkFK
+/Makefile                  @GokturkFK
+/.golangci.yml              @GokturkFK
