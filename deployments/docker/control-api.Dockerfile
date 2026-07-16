@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: repo koku (bkz. deployments/docker/docker-compose.yml)
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 # go.sum henuz yok (bagimlilik eklenince olusacak); glob sayesinde varsa kopyalanir.
 COPY go.mod go.sum* ./
