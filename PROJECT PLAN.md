@@ -61,54 +61,73 @@ Kural: bu beş kontrat yazılı ve merge edilmeden hiçbir feature dalı açılm
 
 ## 5. Görevler — CYBER (güvenlik/backend)
 
+> **Güncel sahiplik (ekip kararı, 2026-07-16):** Bölüm başlıkları orijinal plandaki
+> alan gruplamasını gösterir, ama fiili yürütme aşağıdaki *Sahip* etiketlerine göre.
+> `@fetihcakmak` yalnızca güvenlik çekirdeğini (tuzak/canary mantığı, sensör tespit
+> mantığı, auth/RBAC, tehdit modeli) yürütür; geri kalan tüm backend/frontend/test
+> işleri + tüm DevOps `@uzunkubra50`'de.
+
 ### EPIC A — Control API çekirdeği
 - **APP-1 · Proje iskeleti & config** — `cmd/control-api`, ortam değişkeni tabanlı config (HMAC key, DB DSN, NATS URL), graceful shutdown.
+  - *Sahip:* @uzunkubra50
   - *AC:* `go run ./cmd/control-api` boot oluyor, `/healthz` 200 dönüyor.
   - *Est:* 0.5g
 - **APP-2 · Tuzak provisioning endpoint** — `POST /api/v1/traps` → `CredentialCanaryProvider.Provision` → artifacts (username/secret/identity) DB'ye + response'a.
+  - *Sahip:* @fetihcakmak
   - *AC:* İstek atınca DB'de kayıt oluşuyor, dönen username `svc_` ile başlıyor; `GET /api/v1/traps` listeliyor.
   - *Dep:* APP-1, Postgres şeması (OPS-2)
   - *Est:* 1g
 - **APP-3 · Auth & RBAC (temel)** — API'ye JWT/OIDC veya basit token gate + rol ayrımı (operator/read-only).
+  - *Sahip:* @fetihcakmak
   - *AC:* Yetkisiz istek 401; read-only rol provision yapamıyor.
   - *Est:* 1g
 
 ### EPIC B — SSH sensörü
 - **APP-4 · Auth log tailer** — `cmd/sensor-ssh`: `auth.log`/journald'ı takip eden, "Accepted/Failed password for USER" satırlarını parse eden okuyucu.
+  - *Sahip:* @fetihcakmak
   - *AC:* Canlı log satırından `username` doğru çıkarılıyor; rotate/truncate dayanıklı.
   - *Est:* 1g
 - **APP-5 · Decode + publish** — parse edilen satır → `RawObservation` → `Decode` → trip ise `trip.events.v1`'e JSON publish.
+  - *Sahip:* @fetihcakmak
   - *AC:* Canary username ile login → NATS'e bir `TripEvent` düşüyor; normal username → `ErrNotATrip`, hiçbir şey yayınlanmıyor (sıfır-FP kanıtı).
   - *Dep:* APP-4, kontratlar donmuş
   - *Est:* 1g
 
 ### EPIC C — Ingestion + korelasyon + alarm
 - **APP-6 · Ingestion consumer** — control-api içinde `trip.events.v1` subscriber, gelen event'i `trip_events` tablosuna yazar, korelasyon tamponuna besler.
+  - *Sahip:* @uzunkubra50
   - *AC:* Publish edilen her trip DB'ye idempotent yazılıyor (event_id unique).
   - *Est:* 1g
 - **APP-7 · Korelasyon entegrasyonu** — mevcut `correlate.Evaluate`'i son N dakikanın trip'leriyle çağır, üretilen alarmları `alerts` tablosuna yaz.
+  - *Sahip:* @uzunkubra50 (alarm severity mantığı `@fetihcakmak` tarafından review edilmeli)
   - *AC:* Tek trip → 1 High alarm; aynı kaynaktan 2 trip → 1 Critical alarm (mevcut testler yeşil kalır).
   - *Dep:* APP-6
   - *Est:* 1g
 - **APP-8 · Bildirim fan-out** — yeni alarmı Telegram + webhook + **syslog CEF** (SIEM) çıkışlarına gönder.
+  - *Sahip:* @uzunkubra50
   - *AC:* Alarm oluşunca üç kanala da düşüyor; kanal hatası diğerlerini bloklamıyor.
   - *Dep:* APP-7, `siem-sink` (OPS-6)
   - *Est:* 1g
 
 ### EPIC D — Panel & doğrulama
 - **APP-9 · Dashboard alarm feed'i** — Streamlit GÖKTÜRK paneli `GET /api/v1/alerts`'i çekip canlı gösterir (severity, kaynak, ATT&CK tekniği, ilk/son görülme).
+  - *Sahip:* @uzunkubra50
   - *AC:* Alarm oluşunca panelde ≤5 sn içinde beliriyor.
   - *Est:* 1g
 - **APP-10 · Testler & kapsam** — provider + ingestion + korelasyon için unit; uçtan uca bir integration test (sahte login → alarm).
+  - *Sahip:* @uzunkubra50 (sıfır-FP integration testi `@fetihcakmak` tarafından review edilmeli)
   - *AC:* `go test ./...` yeşil, kapsam ≥ %70 çekirdek paketlerde; `-race` temiz.
   - *Est:* 1g
 - **APP-11 · Tehdit modeli & framework mapping** — MITRE Engage (deception) + ATT&CK (T1078/T1021) eşlemesi, kısa STRIDE tablosu, README mimari bölümü.
+  - *Sahip:* @fetihcakmak
   - *AC:* README'de mimari diyagram + tehdit modeli + demo GIF.
   - *Est:* 1g
 
 ---
 
 ## 6. Görevler — DEVOPS (platform/teslimat/ops)
+
+> *Sahip:* Bu bölümdeki tüm görevler (OPS-1..10) @uzunkubra50.
 
 ### EPIC E — Repo & CI/CD (shift-left)
 - **OPS-1 · Monorepo hijyeni** — dizin düzeni, `Makefile` (build/test/lint/run), `golangci-lint` config, `pre-commit`, conventional commits, CODEOWNERS.
