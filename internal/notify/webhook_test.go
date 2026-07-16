@@ -11,6 +11,13 @@ import (
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/correlate"
 )
 
+func TestWebhookChannel_Name(t *testing.T) {
+	ch := NewWebhookChannel("http://example.invalid")
+	if got := ch.Name(); got != "webhook" {
+		t.Errorf("Name() = %q, istenen webhook", got)
+	}
+}
+
 func TestNewWebhookChannel_EmptyURLReturnsNil(t *testing.T) {
 	if ch := NewWebhookChannel(""); ch != nil {
 		t.Error("bos url ile nil donmeli")

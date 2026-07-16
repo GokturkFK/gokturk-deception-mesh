@@ -10,6 +10,13 @@ import (
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/correlate"
 )
 
+func TestSyslogCEFChannel_Name(t *testing.T) {
+	ch := NewSyslogCEFChannel("127.0.0.1:514")
+	if got := ch.Name(); got != "syslog-cef" {
+		t.Errorf("Name() = %q, istenen syslog-cef", got)
+	}
+}
+
 func TestNewSyslogCEFChannel_EmptyAddrReturnsNil(t *testing.T) {
 	if ch := NewSyslogCEFChannel(""); ch != nil {
 		t.Error("bos addr ile nil donmeli")

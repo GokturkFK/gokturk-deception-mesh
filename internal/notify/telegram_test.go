@@ -11,6 +11,13 @@ import (
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/correlate"
 )
 
+func TestTelegramChannel_Name(t *testing.T) {
+	ch := NewTelegramChannel("t", "c")
+	if got := ch.Name(); got != "telegram" {
+		t.Errorf("Name() = %q, istenen telegram", got)
+	}
+}
+
 func TestNewTelegramChannel_EmptyConfigReturnsNil(t *testing.T) {
 	if ch := NewTelegramChannel("", "chat"); ch != nil {
 		t.Error("bos token ile nil donmeli")
