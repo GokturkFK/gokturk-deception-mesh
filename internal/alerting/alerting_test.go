@@ -121,6 +121,60 @@ func TestNew_ZeroWindowUsesDefault(t *testing.T) {
 	}
 }
 
+type fakeNotifier struct {
+	calls []correlate.Alert
+}
+
+func (f *fakeNotifier) Notify(_ context.Context, a correlate.Alert) {
+	f.calls = append(f.calls, a)
+}
+
+func TestCorrelate_CallsNotifierOnSuccessfulUpsert(t *testing.T) {
+	trips := &fakeTrips{events: []trap.TripEvent{
+		{EventID: "e1", Source: "10.0.0.1", ObservedAt: time.Now().UTC()},
+	}}
+	notifier := &fakeNotifier{}
+	e := New(trips, &fakeAlerts{}, 0, testLogger())
+	e.SetNotifier(notifier)
+
+	if err := e.Correlate(context.Background(), "10.0.0.1"); err != nil {
+		t.Fatalf("Correlate: %v", err)
+	}
+	if len(notifier.calls) != 1 {
+		t.Fatalf("notifier cagri sayisi = %d, istenen 1", len(notifier.calls))
+	}
+	if notifier.calls[0].ID != "alert-1" {
+		t.Errorf("notifier'a upsert edilmis (ID dolu) alarm gecirilmeli, alindi: %+v", notifier.calls[0])
+	}
+}
+
+func TestCorrelate_NoNotifierSetDoesNotPanic(t *testing.T) {
+	trips := &fakeTrips{events: []trap.TripEvent{
+		{EventID: "e1", Source: "10.0.0.1", ObservedAt: time.Now().UTC()},
+	}}
+	e := New(trips, &fakeAlerts{}, 0, testLogger())
+
+	if err := e.Correlate(context.Background(), "10.0.0.1"); err != nil {
+		t.Fatalf("Correlate: %v", err)
+	}
+}
+
+func TestCorrelate_UpsertErrorSkipsNotifier(t *testing.T) {
+	trips := &fakeTrips{events: []trap.TripEvent{
+		{EventID: "e1", Source: "10.0.0.1", ObservedAt: time.Now().UTC()},
+	}}
+	notifier := &fakeNotifier{}
+	e := New(trips, &fakeAlerts{err: errors.New("db koptu")}, 0, testLogger())
+	e.SetNotifier(notifier)
+
+	if err := e.Correlate(context.Background(), "10.0.0.1"); err == nil {
+		t.Fatal("upsert hatasi Correlate'ten donmeliydi")
+	}
+	if len(notifier.calls) != 0 {
+		t.Errorf("upsert basarisizken notifier cagrilmamali, cagrildi: %+v", notifier.calls)
+	}
+}
+
 func TestCorrelate_OnlySameSourceTripsCounted(t *testing.T) {
 	now := time.Now().UTC()
 	trips := &fakeTrips{events: []trap.TripEvent{
