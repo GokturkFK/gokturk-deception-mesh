@@ -13,6 +13,7 @@ RUN useradd --create-home --uid 10001 dashboard
 WORKDIR /app
 COPY --from=build --chown=dashboard:dashboard /root/.local /home/dashboard/.local
 COPY --chown=dashboard:dashboard dashboard/app.py dashboard/alerts_client.py ./
+COPY --chown=dashboard:dashboard dashboard/.streamlit ./.streamlit
 
 ENV PATH=/home/dashboard/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \

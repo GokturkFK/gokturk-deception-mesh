@@ -1,4 +1,4 @@
-"""control-api'nin GET /api/v1/alerts uctan alarm cekme ve bicimlendirme mantigi.
+"""control-api'den veri cekme ve panelde gosterim icin bicimlendirme mantigi.
 
 Streamlit calisma zamanindan bagimsiz tutulur ki pytest ile test edilebilsin
 (app.py sadece bu modulu cagirip render eder).
@@ -11,12 +11,20 @@ from typing import Any
 
 import requests
 
-# CEF/dashboard'da kullanilan severity -> (yazi rengi, arka plan rengi).
-SEVERITY_COLORS: dict[str, tuple[str, str]] = {
-    "Critical": ("#ffffff", "#b91c1c"),
-    "High": ("#1f2937", "#f59e0b"),
+# Severity -> CSS sinif eki (bkz. app.py .gk-pill.sev-*). Bilinmeyen
+# degerler notr "unknown" stiline duser.
+SEVERITY_CLASSES: dict[str, str] = {
+    "Critical": "critical",
+    "High": "high",
 }
-DEFAULT_SEVERITY_COLOR = ("#1f2937", "#9ca3af")
+
+# alerts.status -> panelde gosterilen Turkce etiket
+# (degerler migrations/00001_init.sql CHECK kisitiyla ayni).
+STATUS_LABELS: dict[str, str] = {
+    "open": "Açık",
+    "ack": "İncelemede",
+    "closed": "Kapalı",
+}
 
 
 def fetch_alerts(base_url: str, timeout: float = 5.0) -> list[dict[str, Any]]:
@@ -30,15 +38,45 @@ def fetch_alerts(base_url: str, timeout: float = 5.0) -> list[dict[str, Any]]:
     return resp.json()
 
 
+def fetch_traps(base_url: str, timeout: float = 5.0) -> list[dict[str, Any]]:
+    """control-api'den GET /api/v1/traps cagirir; tuzak listesini doner."""
+    resp = requests.get(f"{base_url.rstrip('/')}/api/v1/traps", timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def format_timestamp(raw: str) -> str:
-    """RFC3339 zaman damgasini panelde okunur bir UTC gosterime cevirir."""
+    """RFC3339 zaman damgasini okunur, kesin bir UTC gosterime cevirir."""
     dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def severity_colors(severity: str) -> tuple[str, str]:
-    """Verilen severity icin (yazi rengi, arka plan rengi) doner."""
-    return SEVERITY_COLORS.get(severity, DEFAULT_SEVERITY_COLOR)
+def relative_time(raw: str, now: datetime | None = None) -> str:
+    """RFC3339 zamani 'az önce' / '3 dk önce' gibi goreli metne cevirir.
+
+    now parametresi test edilebilirlik icindir; verilmezse gercek saat.
+    """
+    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if now is None:
+        now = datetime.now(timezone.utc)
+    seconds = max((now - dt).total_seconds(), 0)
+    if seconds < 45:
+        return "az önce"
+    if seconds < 3600:
+        return f"{int(seconds // 60)} dk önce"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)} sa önce"
+    return f"{int(seconds // 86400)} gün önce"
+
+
+def severity_class(severity: str) -> str:
+    """Verilen severity icin CSS sinif ekini doner."""
+    return SEVERITY_CLASSES.get(severity, "unknown")
+
+
+def status_label(status: str) -> str:
+    """Alarm durumunun panelde gosterilen Turkce etiketini doner."""
+    return STATUS_LABELS.get(status, status or "-")
 
 
 def summarize(alerts: list[dict[str, Any]]) -> dict[str, int]:

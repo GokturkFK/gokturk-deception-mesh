@@ -1,0 +1,10 @@
+# Panel temasi — app.py icindeki CSS degiskenleriyle (:root) ayni palet.
+[theme]
+base = "dark"
+primaryColor = "#45C4D3"
+backgroundColor = "#0A111F"
+secondaryBackgroundColor = "#121C30"
+textColor = "#E8EFF9"
+
+[browser]
+gatherUsageStats = false
