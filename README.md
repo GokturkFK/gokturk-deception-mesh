@@ -22,8 +22,9 @@ make docker-up
 Servisler: `control-api`, `sensor-ssh`, `nats`, `postgres`, `dashboard`, `siem-sink`.
 Detay için [deployments/docker/docker-compose.yml](deployments/docker/docker-compose.yml).
 
-> `sensor-ssh` ve `dashboard` için Dockerfile'lar henüz eklenmedi (OPS-5 devam ediyor).
-> Şu an `make docker-up` ile `nats` + `postgres` + `siem-sink` + `control-api` healthy ayağa kalkar.
+> `sensor-ssh` için Dockerfile henüz derlenemez (APP-4/5 kodu yok).
+> Şu an `make docker-up` ile `nats` + `postgres` + `siem-sink` + `control-api` + `dashboard` healthy ayağa kalkar.
+> Panel: http://localhost:8501 — `GET /api/v1/alerts`'i 3 sn'de bir çeker.
 
 ## Migration'lar
 
@@ -38,7 +39,8 @@ make migrate-down
 
 `main` korumalı:
 - Direkt push yok (repo sahibi dahil) — her değişiklik PR ile gelir.
-- Merge öncesi `Build, vet, test` + `golangci-lint` CI kontrolleri yeşil olmalı.
+- Merge öncesi tüm zorunlu CI kontrolleri yeşil olmalı: `Build, vet, test`, `golangci-lint`,
+  `Docker build (control-api)`, `Dashboard tests (pytest)`, `Docker build (dashboard)`.
 - Onay (approval) şart değil — CI yeşilse PR sahibi tek başına merge edebilir.
 - Force-push ve branch silme main'de kapalı; linear history zorunlu (merge yalnızca **squash**).
 - PR merge olunca kaynak branch otomatik silinir.

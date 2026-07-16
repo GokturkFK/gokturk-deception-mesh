@@ -139,6 +139,7 @@ func main() {
 	api := &apiServer{
 		provider: trap.NewCredentialCanaryProvider([]byte(cfg.hmacKey)),
 		store:    st,
+		alerts:   st,
 		logger:   logger,
 	}
 	srv := newServer(cfg, api)
@@ -194,6 +195,7 @@ func newServer(cfg config, api *apiServer) *http.Server {
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("POST /api/v1/traps", api.handleCreateTrap)
 	mux.HandleFunc("GET /api/v1/traps", api.handleListTraps)
+	mux.HandleFunc("GET /api/v1/alerts", api.handleListAlerts)
 
 	return &http.Server{
 		Addr:              cfg.httpAddr,

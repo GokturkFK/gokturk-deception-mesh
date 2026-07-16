@@ -99,6 +99,53 @@ func TestStore_UpsertAlert_SecondTripEscalatesSameRow(t *testing.T) {
 	}
 }
 
+func TestStore_ListAlerts_OrderedByLastSeenDesc(t *testing.T) {
+	s := setupStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	older, err := s.UpsertAlert(ctx, correlate.Alert{
+		Severity: correlate.SeverityHigh, Technique: correlate.TechniqueValidAccounts,
+		Source: "10.0.0.30", Status: correlate.StatusOpen,
+		FirstSeen: now.Add(-1 * time.Hour), LastSeen: now.Add(-1 * time.Hour), TripCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("eski alarm: %v", err)
+	}
+	newer, err := s.UpsertAlert(ctx, correlate.Alert{
+		Severity: correlate.SeverityCritical, Technique: correlate.TechniqueValidAccounts,
+		Source: "10.0.0.31", Status: correlate.StatusOpen,
+		FirstSeen: now, LastSeen: now, TripCount: 2,
+	})
+	if err != nil {
+		t.Fatalf("yeni alarm: %v", err)
+	}
+
+	got, err := s.ListAlerts(ctx)
+	if err != nil {
+		t.Fatalf("ListAlerts: %v", err)
+	}
+
+	idxOf := func(id string) int {
+		for i, a := range got {
+			if a.ID == id {
+				return i
+			}
+		}
+		return -1
+	}
+	iNewer, iOlder := idxOf(newer.ID), idxOf(older.ID)
+	if iNewer < 0 || iOlder < 0 {
+		t.Fatalf("her iki alarm da listede olmali, alindi: %+v", got)
+	}
+	if iNewer > iOlder {
+		t.Errorf("beklenen: en son gorulen (last_seen) once gelir; iNewer=%d iOlder=%d", iNewer, iOlder)
+	}
+	if got[iNewer].Technique != correlate.TechniqueValidAccounts {
+		t.Errorf("technique = %q, istenen %q", got[iNewer].Technique, correlate.TechniqueValidAccounts)
+	}
+}
+
 func TestStore_UpsertAlert_ClosedAlertDoesNotBlockNewOne(t *testing.T) {
 	s := setupStore(t)
 	ctx := context.Background()

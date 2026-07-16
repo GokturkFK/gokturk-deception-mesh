@@ -156,6 +156,39 @@ func (s *Store) UpsertAlert(ctx context.Context, a correlate.Alert) (correlate.A
 	return a, nil
 }
 
+// ListAlerts, alarmlari en son guncellenen once olacak sekilde listeler
+// (APP-9: dashboard alarm feed'i).
+func (s *Store) ListAlerts(ctx context.Context) ([]correlate.Alert, error) {
+	const q = `
+		SELECT id::text, severity, technique, source, status, first_seen, last_seen, trip_count
+		FROM alerts
+		ORDER BY last_seen DESC`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("store: alarmlar listelenemedi: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var alerts []correlate.Alert
+	for rows.Next() {
+		var (
+			a         correlate.Alert
+			technique sql.NullString
+		)
+		if err := rows.Scan(&a.ID, &a.Severity, &technique, &a.Source, &a.Status, &a.FirstSeen, &a.LastSeen, &a.TripCount); err != nil {
+			return nil, fmt.Errorf("store: satir okunamadi: %w", err)
+		}
+		if technique.Valid {
+			a.Technique = technique.String
+		}
+		alerts = append(alerts, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: satirlar okunurken hata: %w", err)
+	}
+	return alerts, nil
+}
+
 // ListTraps, tuzaklari en yeni once olacak sekilde listeler. secret_hash
 // bilincli olarak secilmez — API cevabina asla cikmamali.
 func (s *Store) ListTraps(ctx context.Context) ([]trap.Trap, error) {
