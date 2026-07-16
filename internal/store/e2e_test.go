@@ -1,99 +1,31 @@
-// Package integration_test, control-api'nin gercek bilesenlerini (store,
-// ingest, alerting) NATS/HTTP olmadan dogrudan birbirine baglayip
-// PROJECT PLAN.md APP-10'un istedigi uctan uca senaryoyu dogrular:
-// "sahte login (trip event) -> alarm". Postgres erisilemezse atlanir
-// (bkz. internal/store/postgres_test.go ile ayni desen).
-package integration_test
+package store
+
+// APP-10 uctan uca testi bilincli olarak bu pakette (package store) tutulur,
+// ayri bir pakette DEGIL: ayri bir pakette olsaydi `go test ./...` internal/store
+// ile ayni anda calisir ve ikisi de setupStore/applySchema ile ayni gercek
+// Postgres'e karsi DROP+CREATE yapardi — bu, "CREATE EXTENSION" gibi DDL'lerde
+// yarisa (ve CI'da goruldugu gibi "duplicate key value violates unique
+// constraint pg_extension_name_index" hatasina) yol acar. Ayni pakette
+// olunca test binary'si tek surecte sirali calisir, yaris ortadan kalkar.
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
-
-	_ "github.com/lib/pq"
 
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/alerting"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/correlate"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/ingest"
-	"github.com/GokturkFK/gokturk-deception-mesh/internal/store"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
 )
-
-func testDSN() string {
-	if v := os.Getenv("DB_DSN"); v != "" {
-		return v
-	}
-	return "postgres://gokturk:gokturk@localhost:5432/gokturk?sslmode=disable"
-}
-
-func setupStore(t *testing.T) *store.Store {
-	t.Helper()
-
-	db, err := sql.Open("postgres", testDSN())
-	if err != nil {
-		t.Skipf("postgres surucusu acilamadi, integration testi atlaniyor: %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		t.Skipf("postgres erisilemez, integration testi atlaniyor: %v", err)
-	}
-
-	applySchema(t, db)
-	t.Cleanup(func() { _ = db.Close() })
-	return store.New(db)
-}
-
-// applySchema, migration dosyasindaki Up bolumunu temiz bir sema icin uygular
-// (bkz. internal/store/postgres_test.go — ayni desen, cross-package test
-// oldugu icin kucuk bir kopya olarak tutulur).
-func applySchema(t *testing.T, db *sql.DB) {
-	t.Helper()
-
-	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", "00001_init.sql"))
-	if err != nil {
-		t.Fatalf("migration dosyasi okunamadi: %v", err)
-	}
-	up := extractGooseUp(string(raw))
-
-	ctx := context.Background()
-	_, _ = db.ExecContext(ctx, `ALTER TABLE IF EXISTS trip_events DROP CONSTRAINT IF EXISTS fk_trip_events_alert`)
-	for _, tbl := range []string{"trip_events", "alerts", "traps"} {
-		if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl+" CASCADE"); err != nil {
-			t.Fatalf("tablo temizlenemedi (%s): %v", tbl, err)
-		}
-	}
-	if _, err := db.ExecContext(ctx, up); err != nil {
-		t.Fatalf("sema uygulanamadi: %v", err)
-	}
-}
-
-func extractGooseUp(s string) string {
-	const upMarker = "-- +goose Up"
-	start := strings.Index(s, upMarker)
-	if start < 0 {
-		return s
-	}
-	s = s[start+len(upMarker):]
-	if end := strings.Index(s, "-- +goose Down"); end >= 0 {
-		s = s[:end]
-	}
-	return s
-}
 
 // TestEndToEnd_FakeLoginTriggersSingleCriticalAlert, APP-10'un istedigi
 // uctan uca senaryoyu ve sifir-FP tezini birlikte dogrular: bir canary'e
 // karsi 2 "sahte login" (trip event) -> ingestion -> korelasyon -> DB'de
-// TOPLAMDA tam olarak 1 alarm (baska hicbir kaynaga sizinti/FP yok).
+// TOPLAMDA tam olarak 1 Critical alarm (baska hicbir kaynaga sizinti/FP yok).
 //
 // NOT (PLAN APP-10): bu test @fetihcakmak tarafindan sifir-FP acisindan
 // review edilmelidir.
