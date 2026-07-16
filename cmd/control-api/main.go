@@ -16,6 +16,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/GokturkFK/gokturk-deception-mesh/internal/alerting"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/ingest"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/store"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
@@ -120,7 +121,11 @@ func main() {
 	defer stop()
 
 	go func() {
+		engine := alerting.New(st, st, 0, logger)
 		consumer := ingest.New(st, logger)
+		consumer.OnInserted = func(ctx context.Context, ev trap.TripEvent) error {
+			return engine.Correlate(ctx, ev.Source)
+		}
 		logger.Info("ingestion consumer basliyor", "subject", trap.SubjectTripEvents)
 		if err := ingest.Run(ctx, nc, consumer); err != nil {
 			logger.Error("ingestion consumer durdu", "err", err)

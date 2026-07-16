@@ -34,6 +34,12 @@ type Store interface {
 type Consumer struct {
 	store  Store
 	logger *slog.Logger
+
+	// OnInserted, yeni (yinelenmeyen) bir trip basariyla yazildiktan sonra
+	// cagirilir. Korelasyonu tetiklemek icin control-api tarafindan
+	// baglanir (APP-7); nil birakilabilir. Hatasi Handle'i basarisiz
+	// kilmaz — trip zaten kalicidir, sadece loglanir.
+	OnInserted func(ctx context.Context, ev trap.TripEvent) error
 }
 
 // New, verilen store ve logger ile bir Consumer olusturur.
@@ -66,6 +72,12 @@ func (c *Consumer) Handle(ctx context.Context, data []byte) error {
 	c.logger.Info("trip kaydedildi",
 		"event_id", ev.EventID, "trap_id", ev.TrapID,
 		"sensor", ev.Sensor, "source", ev.Source)
+
+	if c.OnInserted != nil {
+		if err := c.OnInserted(ctx, ev); err != nil {
+			c.logger.Error("trip sonrasi kanca basarisiz", "event_id", ev.EventID, "err", err)
+		}
+	}
 	return nil
 }
 
