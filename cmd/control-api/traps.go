@@ -21,6 +21,7 @@ type trapStore interface {
 type apiServer struct {
 	provider trap.Provider
 	store    trapStore
+	alerts   alertLister
 	logger   *slog.Logger
 }
 

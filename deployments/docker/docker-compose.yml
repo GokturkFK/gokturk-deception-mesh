@@ -77,8 +77,8 @@ services:
       nats:
         condition: service_healthy
 
-  # TODO(Cyber): mevcut Streamlit GÖKTÜRK panelinin kodu bu repoya taşınınca
-  # context/dockerfile yolu güncellenecek.
+  # Streamlit GÖKTÜRK paneli (APP-9): control-api'nin GET /api/v1/alerts
+  # ucunu periyodik ceker, kod dashboard/ altindadir.
   dashboard:
     build:
       context: ../../
