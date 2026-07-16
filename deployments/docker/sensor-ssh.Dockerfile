@@ -5,7 +5,7 @@
 # icin anlamli bir saglik sinyali APP-4/5'in ic mimarisine bagli).
 # Build context: repo koku (bkz. deployments/docker/docker-compose.yml)
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
