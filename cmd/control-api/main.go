@@ -18,6 +18,7 @@ import (
 
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/alerting"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/ingest"
+	"github.com/GokturkFK/gokturk-deception-mesh/internal/notify"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/store"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
 )
@@ -31,6 +32,14 @@ type config struct {
 	dbDSN    string
 	natsURL  string
 	hmacKey  string
+
+	// APP-8 bildirim kanallari: hepsi opsiyoneldir. Bos birakilan kanal
+	// devre disi kalir (bkz. wireNotifier), MVP Definition of Done'da
+	// zorunlu olan tek kanal siem-sink'tir (docker-compose SIEM_SYSLOG_ADDR).
+	telegramBotToken string
+	telegramChatID   string
+	webhookURL       string
+	syslogAddr       string
 }
 
 func loadConfig() (config, error) {
@@ -39,6 +48,11 @@ func loadConfig() (config, error) {
 		dbDSN:    os.Getenv("DB_DSN"),
 		natsURL:  os.Getenv("NATS_URL"),
 		hmacKey:  os.Getenv("HMAC_KEY"),
+
+		telegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		telegramChatID:   os.Getenv("TELEGRAM_CHAT_ID"),
+		webhookURL:       os.Getenv("WEBHOOK_URL"),
+		syslogAddr:       os.Getenv("SIEM_SYSLOG_ADDR"),
 	}
 
 	var missing []string
@@ -69,6 +83,25 @@ func envOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// wireNotifier, yapilandirilmis APP-8 kanallarindan bir Fanout kurar.
+// Kurucular (NewTelegramChannel, ...) yapilandirilmamis kanallar icin
+// tipli nil pointer doner; bunlari notify.Channel arayuzune sarmadan ONCE
+// somut tip uzerinden elemek gerekir — aksi halde Fanout "nil olmayan ama
+// nil calisan" bir kanalla ugrasir (bkz. internal/notify/notify.go).
+func wireNotifier(cfg config, logger *slog.Logger) *notify.Fanout {
+	var channels []notify.Channel
+	if ch := notify.NewTelegramChannel(cfg.telegramBotToken, cfg.telegramChatID); ch != nil {
+		channels = append(channels, ch)
+	}
+	if ch := notify.NewWebhookChannel(cfg.webhookURL); ch != nil {
+		channels = append(channels, ch)
+	}
+	if ch := notify.NewSyslogCEFChannel(cfg.syslogAddr); ch != nil {
+		channels = append(channels, ch)
+	}
+	return notify.New(logger, channels...)
 }
 
 func main() {
@@ -122,6 +155,7 @@ func main() {
 
 	go func() {
 		engine := alerting.New(st, st, 0, logger)
+		engine.SetNotifier(wireNotifier(cfg, logger))
 		consumer := ingest.New(st, logger)
 		consumer.OnInserted = func(ctx context.Context, ev trap.TripEvent) error {
 			return engine.Correlate(ctx, ev.Source)

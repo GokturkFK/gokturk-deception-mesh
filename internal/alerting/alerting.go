@@ -29,13 +29,22 @@ type AlertUpserter interface {
 	UpsertAlert(ctx context.Context, a correlate.Alert) (correlate.Alert, error)
 }
 
+// AlertNotifier, kalici olarak yazilmis bir alarmi disari (Telegram,
+// webhook, SIEM, ...) dagitir (APP-8). Notify hata dondurmez: bildirim
+// alarmin yazilmasina bagli bir yan etkidir, kendi hatalarini kendisi
+// loglar ve Engine'i bloklamaz (bkz. internal/notify.Fanout).
+type AlertNotifier interface {
+	Notify(ctx context.Context, a correlate.Alert)
+}
+
 // Engine, bir kaynaktaki yeni trip'i mevcut pencereyle yeniden
 // degerlendirip tek bir alarma indirger.
 type Engine struct {
-	trips  TripLister
-	alerts AlertUpserter
-	window time.Duration
-	logger *slog.Logger
+	trips    TripLister
+	alerts   AlertUpserter
+	window   time.Duration
+	logger   *slog.Logger
+	notifier AlertNotifier
 }
 
 // New, verilen bagimliliklarla bir Engine olusturur. window <= 0 ise
@@ -45,6 +54,13 @@ func New(trips TripLister, alerts AlertUpserter, window time.Duration, logger *s
 		window = DefaultWindow
 	}
 	return &Engine{trips: trips, alerts: alerts, window: window, logger: logger}
+}
+
+// SetNotifier, alarm olusunca/guncellenince cagrilacak bildirim
+// dagiticisini ayarlar. Ayarlanmazsa (nil) bildirim gonderilmez —
+// APP-8 kanallari opsiyoneldir (bkz. cmd/control-api/main.go).
+func (e *Engine) SetNotifier(n AlertNotifier) {
+	e.notifier = n
 }
 
 // Correlate, verilen kaynagin son pencere icindeki tum trip'lerini yeniden
@@ -69,6 +85,10 @@ func (e *Engine) Correlate(ctx context.Context, source string) error {
 		e.logger.Info("alarm guncellendi",
 			"alert_id", saved.ID, "source", saved.Source,
 			"severity", saved.Severity, "trip_count", saved.TripCount)
+
+		if e.notifier != nil {
+			e.notifier.Notify(ctx, saved)
+		}
 	}
 	return nil
 }
