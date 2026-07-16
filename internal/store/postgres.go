@@ -9,10 +9,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	_ "github.com/lib/pq" // "postgres" surucusunu database/sql'e kaydeder
 
+	"github.com/GokturkFK/gokturk-deception-mesh/internal/correlate"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
 )
 
@@ -65,6 +68,92 @@ func (s *Store) InsertTripEvent(ctx context.Context, ev trap.TripEvent) (bool, e
 		return false, fmt.Errorf("store: etkilenen satir okunamadi: %w", err)
 	}
 	return n == 1, nil
+}
+
+// ListTripEventsSince, verilen kaynaktan, verilen zamandan itibaren gozlenen
+// trip'leri gozlem sirasina gore doner (APP-7 korelasyon penceresi girdisi).
+func (s *Store) ListTripEventsSince(ctx context.Context, source string, since time.Time) ([]trap.TripEvent, error) {
+	const q = `
+		SELECT event_id, trap_id, sensor, source, observed_at, raw
+		FROM trip_events
+		WHERE source = $1 AND observed_at >= $2
+		ORDER BY observed_at ASC`
+	rows, err := s.db.QueryContext(ctx, q, source, since)
+	if err != nil {
+		return nil, fmt.Errorf("store: trip'ler listelenemedi: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var events []trap.TripEvent
+	for rows.Next() {
+		var (
+			ev  trap.TripEvent
+			raw []byte
+		)
+		if err := rows.Scan(&ev.EventID, &ev.TrapID, &ev.Sensor, &ev.Source, &ev.ObservedAt, &raw); err != nil {
+			return nil, fmt.Errorf("store: satir okunamadi: %w", err)
+		}
+		ev.Raw = raw
+		events = append(events, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: satirlar okunurken hata: %w", err)
+	}
+	return events, nil
+}
+
+// UpsertAlert, kaynagi icin acik (status=open) bir alarm varsa onu
+// gunceller (severity/first_seen/last_seen/trip_count), yoksa yeni bir
+// tane olusturur. Boylece ayni kaynaktan ardisik trip'ler tek bir alarm
+// satirinda birlesir (PLAN APP-7 AC: "kampanya birlesmesi").
+func (s *Store) UpsertAlert(ctx context.Context, a correlate.Alert) (correlate.Alert, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return correlate.Alert{}, fmt.Errorf("store: islem baslatilamadi: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existingID string
+	var firstSeen time.Time
+	err = tx.QueryRowContext(ctx, `
+		SELECT id::text, first_seen FROM alerts
+		WHERE source = $1 AND status = $2
+		ORDER BY created_at DESC LIMIT 1
+		FOR UPDATE`, a.Source, correlate.StatusOpen).Scan(&existingID, &firstSeen)
+
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		const insertQ = `
+			INSERT INTO alerts (severity, technique, source, status, first_seen, last_seen, trip_count)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id::text`
+		if scanErr := tx.QueryRowContext(ctx, insertQ,
+			a.Severity, a.Technique, a.Source, a.Status, a.FirstSeen, a.LastSeen, a.TripCount,
+		).Scan(&a.ID); scanErr != nil {
+			return correlate.Alert{}, fmt.Errorf("store: alarm olusturulamadi: %w", scanErr)
+		}
+	case err != nil:
+		return correlate.Alert{}, fmt.Errorf("store: acik alarm aranamadi: %w", err)
+	default:
+		if a.FirstSeen.After(firstSeen) {
+			a.FirstSeen = firstSeen // ilk goruleni asla ileri almayiz
+		}
+		const updateQ = `
+			UPDATE alerts
+			SET severity = $1, last_seen = $2, trip_count = $3, first_seen = $4, updated_at = now()
+			WHERE id = $5`
+		if _, execErr := tx.ExecContext(ctx, updateQ,
+			a.Severity, a.LastSeen, a.TripCount, a.FirstSeen, existingID,
+		); execErr != nil {
+			return correlate.Alert{}, fmt.Errorf("store: alarm guncellenemedi: %w", execErr)
+		}
+		a.ID = existingID
+	}
+
+	if err := tx.Commit(); err != nil {
+		return correlate.Alert{}, fmt.Errorf("store: islem onaylanamadi: %w", err)
+	}
+	return a, nil
 }
 
 // ListTraps, tuzaklari en yeni once olacak sekilde listeler. secret_hash

@@ -108,6 +108,65 @@ func TestHandle_DuplicateIsNotError(t *testing.T) {
 	}
 }
 
+func TestHandle_OnInsertedCalledForNewTrip(t *testing.T) {
+	fs := &fakeStore{}
+	c := New(fs, testLogger())
+
+	var got trap.TripEvent
+	calls := 0
+	c.OnInserted = func(_ context.Context, ev trap.TripEvent) error {
+		calls++
+		got = ev
+		return nil
+	}
+
+	data, _ := json.Marshal(validEvent())
+	if err := c.Handle(context.Background(), data); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("OnInserted cagri sayisi = %d, istenen 1", calls)
+	}
+	if got.EventID != "evt-001" {
+		t.Errorf("kancaya gecen event_id = %q, istenen evt-001", got.EventID)
+	}
+}
+
+func TestHandle_OnInsertedNotCalledForDuplicate(t *testing.T) {
+	fs := &fakeStore{duplicate: true}
+	c := New(fs, testLogger())
+
+	calls := 0
+	c.OnInserted = func(context.Context, trap.TripEvent) error {
+		calls++
+		return nil
+	}
+
+	data, _ := json.Marshal(validEvent())
+	if err := c.Handle(context.Background(), data); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("yinelenen trip icin OnInserted cagrilmamali, cagri sayisi = %d", calls)
+	}
+}
+
+func TestHandle_OnInsertedErrorDoesNotFailHandle(t *testing.T) {
+	fs := &fakeStore{}
+	c := New(fs, testLogger())
+	c.OnInserted = func(context.Context, trap.TripEvent) error {
+		return errors.New("korelasyon kirildi")
+	}
+
+	data, _ := json.Marshal(validEvent())
+	if err := c.Handle(context.Background(), data); err != nil {
+		t.Fatalf("OnInserted hatasi Handle'i basarisiz kilmamali: %v", err)
+	}
+	if len(fs.inserted) != 1 {
+		t.Error("trip yine de kalici olarak yazilmis olmali")
+	}
+}
+
 func TestHandle_StoreError(t *testing.T) {
 	fs := &fakeStore{err: errors.New("db koptu")}
 	c := New(fs, testLogger())
