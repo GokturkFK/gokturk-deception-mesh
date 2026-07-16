@@ -65,6 +65,34 @@ func TestStore_InsertTripEvent_UnknownTrap(t *testing.T) {
 	}
 }
 
+func TestStore_InsertTripEvent_RawPersisted(t *testing.T) {
+	s := setupStore(t)
+	ctx := context.Background()
+	tp := createTestTrap(t, s, "svc_rawfull")
+
+	ev := trap.TripEvent{
+		EventID:    "evt-raw-full",
+		TrapID:     tp.ID,
+		Sensor:     "sensor-ssh",
+		Source:     "10.0.0.10",
+		ObservedAt: time.Now().UTC(),
+		Raw:        []byte(`{"line":"Accepted password for svc_x"}`),
+	}
+	if _, err := s.InsertTripEvent(ctx, ev); err != nil {
+		t.Fatalf("dolu Raw ile insert: %v", err)
+	}
+
+	var line string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT raw->>'line' FROM trip_events WHERE event_id = $1`, ev.EventID).Scan(&line)
+	if err != nil {
+		t.Fatalf("raw okunamadi: %v", err)
+	}
+	if line != "Accepted password for svc_x" {
+		t.Errorf("raw.line = %q, beklenen degil", line)
+	}
+}
+
 func TestStore_InsertTripEvent_NilRawBecomesEmptyObject(t *testing.T) {
 	s := setupStore(t)
 	ctx := context.Background()

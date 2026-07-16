@@ -49,8 +49,14 @@ func (s *Store) InsertTripEvent(ctx context.Context, ev trap.TripEvent) (bool, e
 		INSERT INTO trip_events (event_id, trap_id, sensor, source, observed_at, raw)
 		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb))
 		ON CONFLICT (event_id) DO NOTHING`
+	// Raw'i string olarak gecir: lib/pq []byte'i bytea (\x..) kodlar ve
+	// jsonb cast'i "invalid input syntax for type json" ile patlar.
+	var raw any
+	if len(ev.Raw) > 0 {
+		raw = string(ev.Raw)
+	}
 	res, err := s.db.ExecContext(ctx, q,
-		ev.EventID, ev.TrapID, ev.Sensor, ev.Source, ev.ObservedAt, []byte(ev.Raw))
+		ev.EventID, ev.TrapID, ev.Sensor, ev.Source, ev.ObservedAt, raw)
 	if err != nil {
 		return false, fmt.Errorf("store: trip yazilamadi: %w", err)
 	}
