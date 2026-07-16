@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,8 +13,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/store"
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
@@ -84,15 +83,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	pool, err := pgxpool.New(context.Background(), cfg.dbDSN)
+	db, err := sql.Open("postgres", cfg.dbDSN)
 	if err != nil {
-		logger.Error("postgres havuzu olusturulamadi", "err", err)
+		logger.Error("postgres surucusu acilamadi", "err", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
+	defer func() { _ = db.Close() }()
 
 	pingCtx, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := pool.Ping(pingCtx); err != nil {
+	if err := db.PingContext(pingCtx); err != nil {
 		cancelPing()
 		logger.Error("postgres'e baglanilamadi", "err", err)
 		os.Exit(1)
@@ -101,7 +100,7 @@ func main() {
 
 	api := &apiServer{
 		provider: trap.NewCredentialCanaryProvider([]byte(cfg.hmacKey)),
-		store:    store.New(pool),
+		store:    store.New(db),
 		logger:   logger,
 	}
 	srv := newServer(cfg, api)

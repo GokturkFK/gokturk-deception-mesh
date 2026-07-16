@@ -2,13 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/lib/pq"
 
 	"github.com/GokturkFK/gokturk-deception-mesh/internal/trap"
 )
@@ -25,26 +26,26 @@ func testDSN() string {
 func setupStore(t *testing.T) *Store {
 	t.Helper()
 
+	db, err := sql.Open("postgres", testDSN())
+	if err != nil {
+		t.Skipf("postgres surucusu acilamadi, store testi atlaniyor: %v", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	pool, err := pgxpool.New(ctx, testDSN())
-	if err != nil {
-		t.Skipf("postgres havuzu olusturulamadi, store testi atlaniyor: %v", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
 		t.Skipf("postgres erisilemez, store testi atlaniyor: %v", err)
 	}
 
-	applySchema(t, pool)
-	t.Cleanup(pool.Close)
-	return New(pool)
+	applySchema(t, db)
+	t.Cleanup(func() { _ = db.Close() })
+	return New(db)
 }
 
 // applySchema, migration dosyasindaki Up bolumunu temiz bir sema icin uygular.
 // Bu ayni zamanda struct alanlarinin gercek sema ile uyumunu dogrular (OPS-2).
-func applySchema(t *testing.T, pool *pgxpool.Pool) {
+func applySchema(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", "00001_init.sql"))
@@ -54,13 +55,13 @@ func applySchema(t *testing.T, pool *pgxpool.Pool) {
 	up := extractGooseUp(string(raw))
 
 	ctx := context.Background()
-	_, _ = pool.Exec(ctx, `ALTER TABLE IF EXISTS trip_events DROP CONSTRAINT IF EXISTS fk_trip_events_alert`)
+	_, _ = db.ExecContext(ctx, `ALTER TABLE IF EXISTS trip_events DROP CONSTRAINT IF EXISTS fk_trip_events_alert`)
 	for _, tbl := range []string{"trip_events", "alerts", "traps"} {
-		if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS "+tbl+" CASCADE"); err != nil {
+		if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl+" CASCADE"); err != nil {
 			t.Fatalf("tablo temizlenemedi (%s): %v", tbl, err)
 		}
 	}
-	if _, err := pool.Exec(ctx, up); err != nil {
+	if _, err := db.ExecContext(ctx, up); err != nil {
 		t.Fatalf("sema uygulanamadi: %v", err)
 	}
 }
