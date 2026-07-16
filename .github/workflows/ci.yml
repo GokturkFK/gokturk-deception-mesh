@@ -54,12 +54,26 @@ jobs:
         if: steps.gofiles.outputs.found == 'true'
         run: go build ./...
 
-      - name: Test (race detector + coverage)
+      - name: Test (race detector, all packages)
         if: steps.gofiles.outputs.found == 'true'
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: go test -race ./...
 
-      - name: Coverage gate (>= 70% once core packages land)
-        if: steps.gofiles.outputs.found == 'true'
+      - name: Check for core (internal/) source files
+        id: corefiles
+        run: |
+          if find ./internal -name '*.go' 2>/dev/null | grep -q .; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::internal/ altinda henuz .go dosyasi yok — coverage gate core paketler gelince aktiflesecek (bkz. PROJECT PLAN.md APP-10)."
+          fi
+
+      - name: Coverage (core packages only)
+        if: steps.corefiles.outputs.found == 'true'
+        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./internal/...
+
+      - name: Coverage gate (>= 70% on core packages)
+        if: steps.corefiles.outputs.found == 'true'
         run: |
           go tool cover -func=coverage.txt > coverage.summary.txt || true
           TOTAL=$(grep total coverage.summary.txt | awk '{print $3}' | tr -d '%')
@@ -71,7 +85,7 @@ jobs:
           awk -v t="$TOTAL" 'BEGIN { exit (t+0 < 70) }'
 
       - name: Upload coverage artifact
-        if: steps.gofiles.outputs.found == 'true'
+        if: steps.corefiles.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
