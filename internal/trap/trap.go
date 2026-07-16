@@ -14,7 +14,9 @@ import (
 )
 
 // TypeCredentialCanary, v0.1'deki tek tuzak turudur (honeytoken).
-const TypeCredentialCanary = "credential_canary"
+// nolint gerekce: gosec G101 yanlis pozitifi — sabit adi "credential"
+// iceriyor ama deger bir tuzak turu tanimlayicisi, gizli anahtar degil.
+const TypeCredentialCanary = "credential_canary" //nolint:gosec
 
 // SubjectTripEvents, sensorlerin TripEvent yayinladigi NATS subject'i.
 const SubjectTripEvents = "trip.events.v1"
