@@ -60,10 +60,8 @@ services:
       timeout: 3s
       retries: 10
 
-  # TODO(Cyber): cmd/sensor-ssh henuz yazilmadi (APP-4/5) — bu servis su an
-  # buildlenemez. auth.log mount'u Debian/Ubuntu varsayar; APP-4 journald
-  # okuyucu olarak yazılırsa bunun yerine /var/log/journal:/var/log/journal:ro
-  # + farklı bir okuma stratejisi gerekir.
+  # auth.log mount'u Debian/Ubuntu varsayar (journald tabanli dagitimlarda
+  # /var/log/auth.log olmayabilir); demo bu formatta uretilen bir log bekler.
   sensor-ssh:
     build:
       context: ../../
@@ -71,10 +69,14 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       AUTH_LOG_PATH: /var/log/auth.log
+      # APP-5: sensor, canary kullanici -> trap_id eslemesini buradan ceker.
+      CONTROL_API_URL: http://control-api:8080
     volumes:
       - /var/log/auth.log:/var/log/auth.log:ro
     depends_on:
       nats:
+        condition: service_healthy
+      control-api:
         condition: service_healthy
 
   # Streamlit GÖKTÜRK paneli (APP-9): control-api'nin GET /api/v1/alerts
