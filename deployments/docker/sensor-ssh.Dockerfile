@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
-# TASLAK — cmd/sensor-ssh henuz yazilmadi (APP-4/5, @fetihcakmak). Bu Dockerfile
-# derlenemez/test edilemez; kod gelince Cyber ile birlikte gozden gecirilecek
-# (ozellikle HEALTHCHECK: HTTP sunucusu olmayan bir log-tailer/NATS publisher
-# icin anlamli bir saglik sinyali APP-4/5'in ic mimarisine bagli).
+# sensor-ssh: auth.log tailer + SSH parola parseri (APP-4) + Decode/NATS
+# publish (APP-5, @fetihcakmak). HTTP sunucusu yok (yalnizca log tailer +
+# NATS publisher + control-api'ye periyodik canary sorgusu), bu yuzden
+# control-api'nin aksine bir HEALTHCHECK subcommand'i yok; docker-compose.yml
+# hicbir servis sensor-ssh'in "healthy" olmasina bagimli degil.
 # Build context: repo koku (bkz. deployments/docker/docker-compose.yml)
 
 FROM golang:1.26-alpine AS build

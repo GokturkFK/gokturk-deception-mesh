@@ -124,6 +124,21 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+  docker-sensor-ssh:
+    name: Docker build (sensor-ssh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f deployments/docker/sensor-ssh.Dockerfile -t gokturk/sensor-ssh:ci .
+      - name: Trivy scan (fail on HIGH/CRITICAL, fixli CVE'ler)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: gokturk/sensor-ssh:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
   docker-control-api:
     name: Docker build (control-api)
     runs-on: ubuntu-latest
