@@ -123,6 +123,25 @@ Kural: bu beş kontrat yazılı ve merge edilmeden hiçbir feature dalı açılm
   - *AC:* README'de mimari diyagram + tehdit modeli + demo GIF.
   - *Est:* 1g
 
+### EPIC H — Otomatik tuzak dağıtımı (seeding)
+> Köken: @fetihcakmak'ın sorusu — "SOC ekibinin bu yemleri sunuculara elle
+> koyması yerine otomatik bir dağıtım (seeding) mekanizması eklensin mi?"
+> (2026-07-19). Görev ikiye ayrılır: hangi kimliğin nasıl inandırıcı
+> göründüğü (güvenlik tasarımı, Cyber) vs. o kimliği hedef sunucuya
+> gerçekten kim/nasıl yerleştirir (transport/altyapı, DevOps). APP-12,
+> APP-2'nin `Provider` sözleşmesini genişletir; OPS-11 bunu tüketen yeni
+> bir bileşendir (`cmd/seeder` veya control-api'de yeni bir endpoint).
+- **APP-12 · Seed profilleri & tespit-edilemezlik politikası** — hedef OS/servis tipine göre "inandırıcı" bir kimlik şekli (kullanıcı adı deseni, shell, home dizini/dosya zaman damgaları) tanımlayan profil kuralları; seed edilen canary'nin sensöre (APP-4/5) hâlâ doğru yakalandığının garantisi.
+  - *Sahip:* @fetihcakmak
+  - *AC:* Seed edilen hesap, `/etc/passwd`/`last` gibi standart araçlarla gerçek bir hesaptan ayırt edilemiyor; APP-4/5 decoder'ı seed edilen hesaba giriş denemesini hâlâ doğru TripEvent'e çeviriyor.
+  - *Dep:* APP-2, APP-4/5
+  - *Est:* 1g
+- **OPS-11 · Seeding transport & envanter** — hedef sunucuya SSH ile bağlanıp canary'yi (APP-12 profiline göre) gerçekten oluşturan/kaldıran bileşen; hedef envanteri (host/ssh_user/ssh_key_ref), idempotency, revoke, SSH key'lerin güvenli saklanması.
+  - *Sahip:* @uzunkubra50
+  - *AC:* Bir hedef için seed tetiklenince canary hesabı o sunucuda gerçekten oluşuyor; ikinci tetikleme idempotent (yeniden oluşturmuyor); revoke ile hesap kaldırılıyor; SSH private key repo'da/imajda düz metin olarak bulunmuyor.
+  - *Dep:* APP-2, APP-12
+  - *Est:* 1.5g
+
 ---
 
 ## 6. Görevler — DEVOPS (platform/teslimat/ops)
