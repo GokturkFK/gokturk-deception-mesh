@@ -38,6 +38,11 @@ services:
       NATS_URL: nats://nats:4222
       HMAC_KEY: ${HMAC_KEY:?HMAC_KEY .env dosyasinda tanimlanmali}
       HTTP_ADDR: ":8080"
+      # APP-3 auth: POST /api/v1/traps (provision) operator token'ina kilitli.
+      # Bos birakilirsa auth devre disi kalir (air-gapped/gelistirme). Okumalar
+      # (GET traps/alerts) her durumda aciktir; sensor/dashboard degismez.
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN:-}
+      READONLY_TOKEN: ${READONLY_TOKEN:-}
       # APP-8 bildirim fan-out: siem-sink demo icin varsayilan olarak acik,
       # Telegram/webhook opsiyoneldir (.env'de bos birakilirsa devre disi kalir).
       SIEM_SYSLOG_ADDR: siem-sink:514
