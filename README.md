@@ -75,8 +75,10 @@ Detay için [deployments/docker/docker-compose.yml](deployments/docker/docker-co
 ### Demo akışı (DoD)
 
 ```sh
-# 1) Bir canary provision et — dönen "username" svc_ ile başlar, "secret" bir kez döner
-curl -s -XPOST http://localhost:8080/api/v1/traps | tee /tmp/canary.json
+# 1) Bir canary provision et — dönen "username" svc_ ile başlar, "secret" bir kez döner.
+#    APP-3: .env'de OPERATOR_TOKEN ayarlıysa provision o token'ı ister (yoksa 401).
+curl -s -XPOST http://localhost:8080/api/v1/traps \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" | tee /tmp/canary.json
 
 # 2) O kullanıcı adıyla sahte bir SSH login satırını auth.log'a düşür (attacker simülasyonu)
 U=$(jq -r .username /tmp/canary.json)
