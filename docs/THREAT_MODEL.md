@@ -52,13 +52,15 @@ Deception platformunun kendisi de bir saldırı yüzeyidir. v0.1 durumu ve planl
 | **Repudiation** | Bir olayın gerçekleştiği inkâr edilir / iz kaybı | Yapılandırılmış JSON log (slog); `trip_events` kalıcı denetim izi; `event_id` idempotentliği | Değişmez log sevki (OPS-8 telemetri) |
 | **Information Disclosure** | Canary secret'ı sızar ve saldırgan hangi hesapların tuzak olduğunu öğrenir | Secret **düz metin saklanmaz** — yalnızca HMAC-SHA256 özeti (`secret_hash`); `SecretHash` alanı `json:"-"`; `GET /api/v1/traps` secret_hash döndürmez | HMAC anahtarı compose secret olarak (OPS-9) |
 | **Denial of Service** | `trip.events.v1`'e mesaj seli ile ingestion/DB boğulur | JetStream durable consumer + idempotent yazım; poison mesaj ack'lenir (yeniden teslim döngüsü yok) | Rate limiting; kaynak kotaları |
-| **Elevation of Privilege** | Yetkisiz biri provision endpoint'ini çağırıp tuzak ekler/siler | — (endpoint şu an açık) | **Auth & RBAC** (APP-3): operator/read-only rol ayrımı, token kapısı |
+| **Elevation of Privilege** | Yetkisiz biri provision endpoint'ini çağırıp tuzak ekler/siler | **Token gate (APP-3):** `POST /api/v1/traps` operator token'ına kilitli — yetkisiz istek 401, read-only rol 403 (bkz. `cmd/control-api/auth.go`) | Okuma uçlarının da kilitlenmesi + mTLS (OPS-9); token yerine JWT/OIDC (v0.2) |
 
 ### Bilinen açık noktalar (v0.1)
 
-- **API kimlik doğrulaması yok** (APP-3, Sprint 3): provisioning ve alarm endpoint'leri henüz
-  korumasız. Air-gapped dağıtım varsayımıyla kabul edilebilir; internete açık kullanım öncesi
-  APP-3 zorunlu.
+- **Okuma uçları hâlâ korumasız** (APP-3 kısmi): `POST /api/v1/traps` artık operator token'ı
+  ister (yetkisiz → 401, read-only → 403). Ancak `GET /api/v1/traps` ve `GET /api/v1/alerts`
+  bilinçli olarak açık bırakıldı — içerideki sensör resolver'ı ve dashboard yalnızca GET yapar,
+  bunları kilitlemek Sprint 3 mTLS'ine (OPS-9) bağlı. Okumalar secret sızdırmaz (`secret_hash`
+  `json:"-"`). `OPERATOR_TOKEN` boşsa auth tamamen devre dışıdır (yalnızca air-gapped/geliştirme).
 - **Servisler arası düz metin** (OPS-9): NATS ve HTTP trafiği mTLS'siz. Air-gapped iç ağ için
   MVP'de kabul, prod öncesi kapatılacak.
 - **Log parse kırılganlığı**: OpenSSH sürüm/dağıtım farkları satır formatını değiştirebilir;

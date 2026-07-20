@@ -33,6 +33,12 @@ type config struct {
 	natsURL  string
 	hmacKey  string
 
+	// APP-3 auth: operatorToken bos ise auth devre disidir (geriye donuk uyum).
+	// Ayarliysa POST /api/v1/traps yalnizca operator token'i ile cagrilir;
+	// read-only token okuma icindir, provision denerse 403 alir.
+	operatorToken string
+	readonlyToken string
+
 	// APP-8 bildirim kanallari: hepsi opsiyoneldir. Bos birakilan kanal
 	// devre disi kalir (bkz. wireNotifier), MVP Definition of Done'da
 	// zorunlu olan tek kanal siem-sink'tir (docker-compose SIEM_SYSLOG_ADDR).
@@ -48,6 +54,9 @@ func loadConfig() (config, error) {
 		dbDSN:    os.Getenv("DB_DSN"),
 		natsURL:  os.Getenv("NATS_URL"),
 		hmacKey:  os.Getenv("HMAC_KEY"),
+
+		operatorToken: os.Getenv("OPERATOR_TOKEN"),
+		readonlyToken: os.Getenv("READONLY_TOKEN"),
 
 		telegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		telegramChatID:   os.Getenv("TELEGRAM_CHAT_ID"),
@@ -135,6 +144,11 @@ func main() {
 	}
 	cancelPing()
 
+	if cfg.operatorToken == "" {
+		logger.Warn("OPERATOR_TOKEN ayarli degil: POST /api/v1/traps KORUMASIZ " +
+			"(yalnizca air-gapped/gelistirme icin kabul edilebilir, bkz. APP-3)")
+	}
+
 	st := store.New(db)
 	api := &apiServer{
 		provider: trap.NewCredentialCanaryProvider([]byte(cfg.hmacKey)),
@@ -192,8 +206,11 @@ func main() {
 
 func newServer(cfg config, api *apiServer) *http.Server {
 	mux := http.NewServeMux()
+	auth := authConfig{operatorToken: cfg.operatorToken, readonlyToken: cfg.readonlyToken}
 	mux.HandleFunc("GET /healthz", handleHealthz)
-	mux.HandleFunc("POST /api/v1/traps", api.handleCreateTrap)
+	// APP-3: yalnizca mutasyon (provision) operator token'ina kilitli; okumalar
+	// acik (bkz. auth.go tasarim notu).
+	mux.HandleFunc("POST /api/v1/traps", auth.requireOperator(api.handleCreateTrap))
 	mux.HandleFunc("GET /api/v1/traps", api.handleListTraps)
 	mux.HandleFunc("GET /api/v1/alerts", api.handleListAlerts)
 
