@@ -68,7 +68,9 @@ type RawObservation struct {
 }
 
 // Provider, bir tuzak turunun yasam dongusunu yonetir (APP-2).
-// Donen username `svc_` on ekiyle baslar.
+// Donen username varsayilan olarak `svc_` on ekiyle baslar; seeding yolunda
+// profil tabanli inandirici adlarla degistirilebilir (APP-12, bkz.
+// WithUsernameGenerator ve internal/seed).
 type Provider interface {
 	Provision(ctx context.Context, createdBy string) (*Trap, *Artifacts, error)
 }
