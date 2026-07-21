@@ -20,12 +20,34 @@ const usernamePrefix = "svc_"
 // saklanir (secret_hash), boylece DB sizsa bile secret geri elde edilemez.
 type CredentialCanaryProvider struct {
 	hmacKey []byte
+
+	// usernameGen, nil ise varsayilan `svc_`+hex uretimi kullanilir.
+	// APP-12 seeding'de profil tabanli, "inandirici" ad uretimiyle degistirilir.
+	usernameGen func() (string, error)
+}
+
+// CanaryOption, provider davranisini degistiren opsiyonel ayardir.
+type CanaryOption func(*CredentialCanaryProvider)
+
+// WithUsernameGenerator, kullanici adi uretimini disaridan verilen fonksiyonla
+// degistirir (APP-12).
+//
+// Gerekce: varsayilan `svc_`+hex adi bir hedefe EKILDIGINDE sirittir (tek tip
+// on ek + yuksek entropili blok). Seeding yolunda internal/seed profilleri bu
+// opsiyonla devreye girer; varsayilan yol (dogrudan API provision) degismez,
+// boylece APP-2 davranisi ve mevcut demo aynen korunur.
+func WithUsernameGenerator(gen func() (string, error)) CanaryOption {
+	return func(p *CredentialCanaryProvider) { p.usernameGen = gen }
 }
 
 // NewCredentialCanaryProvider, verilen HMAC anahtariyla bir provider olusturur.
 // Anahtar en az 32 bayt olmali (cagiran config katmani dogrular).
-func NewCredentialCanaryProvider(hmacKey []byte) *CredentialCanaryProvider {
-	return &CredentialCanaryProvider{hmacKey: hmacKey}
+func NewCredentialCanaryProvider(hmacKey []byte, opts ...CanaryOption) *CredentialCanaryProvider {
+	p := &CredentialCanaryProvider{hmacKey: hmacKey}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // Provision, yeni bir canary uretir. Donen Trap henuz persist edilmemistir
@@ -36,7 +58,11 @@ func (p *CredentialCanaryProvider) Provision(_ context.Context, createdBy string
 		return nil, nil, fmt.Errorf("trap: HMAC anahtari bos, canary secret'i imzalanamaz")
 	}
 
-	username, err := randomUsername()
+	gen := p.usernameGen
+	if gen == nil {
+		gen = randomUsername
+	}
+	username, err := gen()
 	if err != nil {
 		return nil, nil, err
 	}
