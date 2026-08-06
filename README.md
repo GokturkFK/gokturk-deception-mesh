@@ -96,6 +96,16 @@ Yukarıdaki adım 1-2'yi elle yapmak yerine, `cmd/seeder` "inandırıcı" bir ki
 gerçek bir hedef sunucuya SSH ile yerleştirir (hesap + parola + geriye tarihlenmiş home
 dizini). Detay ve tam sözleşme: [docs/SEEDING.md](docs/SEEDING.md).
 
+### Air-gapped kurulum
+
+Bu repo'nun "air-gapped" iddiası (yukarıdaki tek cümlelik hedefte geçen) sadece lafta
+değil: `deployments/airgapped/build-bundle.sh` tüm servis imajlarını `docker save` ile
+tek bir arşive paketler; hedefteki `install.sh` bunu **hiçbir `docker pull`/`build`
+çağırmadan** ayağa kaldırır. CI'da gerçekten test edilir — bundle oluşturulup yerel
+imajlar silinir, kurulumun SADECE bundle'dan çalıştığı doğrulanır (bkz.
+`.github/workflows/ci.yml`, `airgapped-bundle` job'u). Adım adım:
+[deployments/airgapped/README.md](deployments/airgapped/README.md).
+
 ## Migration'lar
 
 ```sh
