@@ -189,6 +189,34 @@ func (s *Store) ListAlerts(ctx context.Context) ([]correlate.Alert, error) {
 	return alerts, nil
 }
 
+// GetTrap, id'siyle tek bir tuzagi doner (OPS-11 revoke akisinda: hedeften
+// kaldirilacak Unix kullanici adini bulmak icin). secret_hash bilincli
+// olarak secilmez.
+func (s *Store) GetTrap(ctx context.Context, id string) (trap.Trap, error) {
+	const q = `
+		SELECT id::text, type, username, created_by, created_at, revoked_at
+		FROM traps
+		WHERE id = $1`
+	var (
+		t         trap.Trap
+		createdBy sql.NullString
+		revokedAt sql.NullTime
+	)
+	err := s.db.QueryRowContext(ctx, q, id).
+		Scan(&t.ID, &t.Type, &t.Username, &createdBy, &t.CreatedAt, &revokedAt)
+	if err != nil {
+		return trap.Trap{}, fmt.Errorf("store: tuzak bulunamadi (%s): %w", id, err)
+	}
+	if createdBy.Valid {
+		t.CreatedBy = createdBy.String
+	}
+	if revokedAt.Valid {
+		rt := revokedAt.Time
+		t.RevokedAt = &rt
+	}
+	return t, nil
+}
+
 // ListTraps, tuzaklari en yeni once olacak sekilde listeler. secret_hash
 // bilincli olarak secilmez — API cevabina asla cikmamali.
 func (s *Store) ListTraps(ctx context.Context) ([]trap.Trap, error) {

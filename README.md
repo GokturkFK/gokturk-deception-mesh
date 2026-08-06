@@ -90,6 +90,12 @@ docker compose -f deployments/docker/docker-compose.yml logs siem-sink
 
 Canary olmayan bir kullanıcıyla login → **hiçbir alarm yok** (sıfır-FP kanıtı).
 
+### Otomatik tuzak dağıtımı (seeding)
+
+Yukarıdaki adım 1-2'yi elle yapmak yerine, `cmd/seeder` "inandırıcı" bir kimlik üretip
+gerçek bir hedef sunucuya SSH ile yerleştirir (hesap + parola + geriye tarihlenmiş home
+dizini). Detay ve tam sözleşme: [docs/SEEDING.md](docs/SEEDING.md).
+
 ## Migration'lar
 
 ```sh

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -43,26 +44,34 @@ func setupStore(t *testing.T) *Store {
 	return New(db)
 }
 
-// applySchema, migration dosyasindaki Up bolumunu temiz bir sema icin uygular.
-// Bu ayni zamanda struct alanlarinin gercek sema ile uyumunu dogrular (OPS-2).
+// applySchema, migrations/ altindaki TUM dosyalarin Up bolumunu (dosya adina
+// gore sirali) temiz bir sema icin uygular. Bu ayni zamanda struct
+// alanlarinin gercek sema ile uyumunu dogrular (OPS-2).
 func applySchema(t *testing.T, db *sql.DB) {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", "00001_init.sql"))
-	if err != nil {
-		t.Fatalf("migration dosyasi okunamadi: %v", err)
+	files, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("migration dosyalari bulunamadi: %v", err)
 	}
-	up := extractGooseUp(string(raw))
+	sort.Strings(files)
 
 	ctx := context.Background()
 	_, _ = db.ExecContext(ctx, `ALTER TABLE IF EXISTS trip_events DROP CONSTRAINT IF EXISTS fk_trip_events_alert`)
-	for _, tbl := range []string{"trip_events", "alerts", "traps"} {
+	for _, tbl := range []string{"seed_targets", "trip_events", "alerts", "traps"} {
 		if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl+" CASCADE"); err != nil {
 			t.Fatalf("tablo temizlenemedi (%s): %v", tbl, err)
 		}
 	}
-	if _, err := db.ExecContext(ctx, up); err != nil {
-		t.Fatalf("sema uygulanamadi: %v", err)
+
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("migration dosyasi okunamadi (%s): %v", f, err)
+		}
+		if _, err := db.ExecContext(ctx, extractGooseUp(string(raw))); err != nil {
+			t.Fatalf("sema uygulanamadi (%s): %v", f, err)
+		}
 	}
 }
 
@@ -123,6 +132,32 @@ func TestStore_CreateAndList(t *testing.T) {
 	// ListTraps secret_hash secmez — bellekteki alan bos olmali.
 	if found.SecretHash != "" {
 		t.Errorf("ListTraps secret_hash dondurmemeli, geldi: %q", found.SecretHash)
+	}
+}
+
+func TestStore_GetTrap_Found(t *testing.T) {
+	s := setupStore(t)
+	ctx := context.Background()
+	created := createTestTrap(t, s, "svc_gettrap01")
+
+	got, err := s.GetTrap(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetTrap: %v", err)
+	}
+	if got.Username != "svc_gettrap01" {
+		t.Errorf("username = %q, istenen svc_gettrap01", got.Username)
+	}
+	if got.SecretHash != "" {
+		t.Error("GetTrap secret_hash dondurmemeli")
+	}
+}
+
+func TestStore_GetTrap_UnknownIDFails(t *testing.T) {
+	s := setupStore(t)
+	ctx := context.Background()
+
+	if _, err := s.GetTrap(ctx, "00000000-0000-0000-0000-000000000000"); err == nil {
+		t.Error("bilinmeyen id icin hata beklenirdi")
 	}
 }
 

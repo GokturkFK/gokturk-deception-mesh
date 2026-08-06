@@ -6,7 +6,7 @@ kimliği hedefe fiilen yerleştiren transport **OPS-11**'in işidir ve bu sözle
 | Katman | Görev | Sahip | Nerede |
 |---|---|---|---|
 | Kimliğin **şekli** ve tespit-edilemezlik politikası | APP-12 | @fetihcakmak | `internal/seed` |
-| Kimliği hedefe **yerleştiren** transport (SSH, envanter, revoke) | OPS-11 | @uzunkubra50 | `cmd/seeder` (planlanan) |
+| Kimliği hedefe **yerleştiren** transport (SSH, envanter, revoke) | OPS-11 | @uzunkubra50 | `cmd/seeder`, `internal/seeder` |
 
 ---
 
@@ -83,14 +83,49 @@ if issues := id.DetectabilityIssues(p, time.Now()); len(issues) > 0 {
 }
 ```
 
-### OPS-11 tarafında kalan sorumluluklar
+### OPS-11 implementasyonu (`cmd/seeder`, `internal/seeder`)
 
-- SSH transport, hedef envanteri (`host` / `ssh_user` / `ssh_key_ref`).
-- **İdempotency:** ikinci tetikleme hesabı yeniden oluşturmamalı.
-- **Revoke:** hesabın hedeften kaldırılması + `traps.revoked_at` (sensör resolver'ı
-  iptal edilmiş tuzağı zaten atlar, bkz. `internal/sensorssh/resolver.go`).
-- **SSH private key** repo'da/imajda düz metin bulunmamalı (OPS-9 secret yönetimi).
-- Home dizini zaman damgalarını `SeededAt`'e ayarlamak.
+Yukarıdaki sözleşmeyi tüketen transport tamamlandı: bir operator CLI'ı, SSH ile hedefe
+bağlanıp kimliği **gerçekten** yerleştirir/kaldırır — control-api gibi sürekli çalışan bir
+servis değildir, hedef başına elle çalıştırılır.
+
+```sh
+# .env'deki ile AYNI HMAC_KEY (control-api tuzakları doğru dogrulayabilsin diye)
+export DB_DSN=postgres://gokturk:gokturk@localhost:5432/gokturk?sslmode=disable
+export HMAC_KEY=...
+
+# Seed: hedefe bağlan, mevcut hesapları oku, çarpışmayan bir kimlik üret,
+# DetectabilityIssues boşsa tuzağı provision edip hedefe gerçekten yerleştir.
+go run ./cmd/seeder seed -target 10.0.0.50:22 -ssh-user root \
+  -ssh-key ~/.ssh/id_ed25519 -profile debian-service
+
+# Revoke: hesabı hedeften kaldırır + traps.revoked_at (sensör resolver'ı
+# iptal edilmiş tuzağı zaten atlar, bkz. internal/sensorssh/resolver.go).
+go run ./cmd/seeder revoke -target 10.0.0.50:22 -ssh-user root -ssh-key ~/.ssh/id_ed25519
+```
+
+Sorumluluklar ve nasıl karşılandıkları:
+
+- **SSH transport, hedef envanteri:** `internal/seeder/ssh.go` (host key doğrulaması
+  `known_hosts`'a karşı — `InsecureIgnoreHostKey` KULLANILMAZ); envanter
+  `seed_targets` tablosunda (`host`/`ssh_user`/`ssh_key_ref`/`profile`,
+  bkz. `migrations/00002_seed_targets.sql`).
+- **İdempotency:** `host` üzerinde partial unique index (`revoked_at IS NULL`) DB
+  seviyesinde garanti eder; `seeder seed` ikinci çağrıda yeni hesap açmadan mevcut
+  kaydı raporlayıp çıkar.
+- **Revoke:** hesabı (+ home dizini) hedeften kaldırır, `seed_targets.revoked_at` ve
+  `traps.revoked_at`'i günceller. `userdel --remove` kullanıcının özel grubunu zaten
+  kendisi temizler (shadow-utils standart davranışı) — ayrı bir `groupdel` YANLIŞTIR
+  (gerçek bir hedefte denenip düzeltildi, bkz. `internal/seeder/target.go`).
+- **SSH private key düz metin bulunmaz:** anahtar yalnızca operatörün yerel
+  dosya sisteminde durur; `seed_targets.ssh_key_ref` sadece dosya YOLUNU tutar,
+  anahtarın kendisini değil.
+- **Home dizini zaman damgaları:** `Apply`, `SeededAt`'e göre `touch -t` ile geriye
+  tarihler.
+
+Gerçek bir SSH hedefine (Docker'da openssh-server çalıştıran bir Debian container)
+karşı uçtan uca doğrulandı: seed → hesap/grup/shadow doğru oluşuyor, home dizini
+geriye tarihleniyor, ikinci seed idempotent, revoke hesabı tam olarak kaldırıyor.
 
 ## 5. Sensör garantisi
 
