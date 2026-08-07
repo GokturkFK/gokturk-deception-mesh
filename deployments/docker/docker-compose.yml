@@ -100,13 +100,13 @@ services:
 
   # Demo SIEM alıcısı — alarmların syslog CEF olarak gerçekten dışarı çıktığını
   # göstermek için (bkz. PROJECT PLAN.md APP-8 AC). docker compose logs siem-sink
-  # ile gelen CEF mesajları izlenebilir.
+  # ile gelen CEF mesajları izlenebilir. socat imaja BUILD ZAMANINDA gömülür
+  # (bkz. siem-sink.Dockerfile) — air-gapped kurulumda (OPS-7) çalışma zamanında
+  # paket kurmaya çalışmak internet gerektirirdi.
   siem-sink:
-    image: alpine:3.20
-    command: >
-      sh -c "apk add --no-cache socat >/dev/null &&
-             echo 'siem-sink: udp/514 dinleniyor (CEF demo alicisi)' &&
-             socat -u UDP-RECVFROM:514,fork,reuseaddr -"
+    build:
+      context: ../../
+      dockerfile: deployments/docker/siem-sink.Dockerfile
     ports:
       - "514:514/udp"
 

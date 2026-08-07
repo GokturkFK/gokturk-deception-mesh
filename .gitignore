@@ -36,6 +36,7 @@ Thumbs.db
 # Air-gapped bundle output (OPS-7)
 /bundle/
 *.tar
+*.tar.gz
 
 # Local compose overrides
 docker-compose.override.yml
