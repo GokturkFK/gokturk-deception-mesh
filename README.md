@@ -8,7 +8,12 @@ yüksek-kesinlikli bir alarm belirir — hepsi air-gapped, `docker compose up` i
 bir yığın üzerinde.
 
 Tehdit modeli ve çerçeve eşlemesinin ayrıntısı: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
-(Demo GIF: canlı `docker compose up` akışından çekilecek — DoD adımı.)
+
+![Demo: canary tetiklenince saniyeler içinde High, tekrarında Critical alarm](docs/demo.gif)
+
+*Canlı `docker compose up` akışından: bir canary provision edilir, sahte bir SSH
+girişi tetiklenir (≤5 sn'de High alarm), aynı kaynaktan ikinci deneme tek bir
+Critical alarma birleşir (kampanya korelasyonu).*
 
 ## Mimari
 
