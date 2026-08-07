@@ -1,6 +1,11 @@
 # Göktürk Deception Mesh
 
-MVP v0.1 — bkz. [PROJECT PLAN.md](PROJECT%20PLAN.md) (görev dökümü, mimari, DoD).
+**MVP v0.1 tamamlandı** — [Definition of Done](PROJECT%20PLAN.md#8-definition-of-done-mvp-v01)'ın
+8 maddesi de karşılandı. Görev dökümü ve mimari: [PROJECT PLAN.md](PROJECT%20PLAN.md).
+
+Çekirdek sözleşme ve korelasyon motoru ayrı bir modüle çıkarıldı:
+[gokturk-core](https://github.com/GokturkFK/gokturk-core). Aktif geliştirme
+sıradaki üründe: [GÖKKALKAN](https://github.com/GokturkFK/gokkalkan).
 
 **Tek cümlelik hedef:** Bir güvenlik ekibi bir _credential canary_ (honeytoken) eker; bir
 saldırgan onu kullanır; saniyeler içinde SOC panelinde ve SIEM'de **sıfır-false-positive**,

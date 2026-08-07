@@ -1,5 +1,11 @@
 # Göktürk Deception Mesh — MVP v0.1 Görev Planı
 
+> **DURUM: v0.1 TAMAMLANDI.** Bölüm 8'deki Definition of Done'ın 8 maddesi de
+> karşılandı (APP-1..12, OPS-1..7, OPS-11 merge edildi). Kapsam dışı bırakılanlar
+> aşağıda işaretli. Sonraki adım bu repoda değil: çekirdek
+> [gokturk-core](https://github.com/GokturkFK/gokturk-core)'a çıkarıldı, aktif
+> geliştirme [GÖKKALKAN](https://github.com/GokturkFK/gokkalkan)'da sürüyor.
+
 > İki kişilik ekip için hazırlanmış, board'a doğrudan taşınabilir görev dökümü.
 > **Cyber** = güvenlik/backend çekirdeği (uygulama mantığı).
 > **DevOps** = platform, teslimat, ops (CI/CD, container, gözlemlenebilirlik, air-gapped paketleme).
@@ -199,16 +205,35 @@ Kural: bu beş kontrat yazılı ve merge edilmeden hiçbir feature dalı açılm
 
 ## 8. Definition of Done (MVP v0.1)
 
-Aşağıdakilerin **hepsi** doğruysa v0.1 bitmiştir:
+**Durum: 8/8 tamamlandı.** Aşağıdakilerin **hepsi** doğruysa v0.1 bitmiştir:
 
-1. Ağı kapalı bir makinede `docker compose up` → tüm servisler healthy.
-2. API'den bir credential canary provision ediliyor; dönen `svc_...` username bir hedefe ekiliyor.
-3. O username ile bir SSH login simüle edildiğinde ≤5 sn içinde: panelde **High** alarm + `siem-sink`'te syslog CEF kaydı.
-4. Aynı kaynaktan ikinci bir trip → panelde tek **Critical** alarm (kampanya birleşmesi).
-5. Normal (canary olmayan) login → **hiçbir alarm yok** (sıfır-FP kanıtı, integration test ile de doğrulanmış).
-6. `go test ./...` yeşil, `-race` temiz, çekirdek kapsam ≥ %70.
-7. README: mimari diyagram + tehdit modeli (Engage/ATT&CK) + air-gapped kurulum + demo GIF.
-8. CI PR'ı bloklayabiliyor; image imzalı + SBOM'lu + Trivy'den geçmiş.
+1. ✅ Ağı kapalı bir makinede `docker compose up` → tüm servisler healthy.
+   *(OPS-7; CI'da `airgapped-bundle` job'u yerel imajları silip kurulumun yalnızca
+   bundle'dan çalıştığını her PR'da doğruluyor.)*
+2. ✅ API'den bir credential canary provision ediliyor; dönen `svc_...` username bir hedefe ekiliyor.
+   *(APP-2; ayrıca OPS-11 + APP-12 ile SSH üzerinden otomatik seeding.)*
+3. ✅ O username ile bir SSH login simüle edildiğinde ≤5 sn içinde: panelde **High** alarm + `siem-sink`'te syslog CEF kaydı.
+4. ✅ Aynı kaynaktan ikinci bir trip → panelde tek **Critical** alarm (kampanya birleşmesi).
+   *(3 ve 4, README'deki demo GIF'te canlı stack üzerinden gösteriliyor.)*
+5. ✅ Normal (canary olmayan) login → **hiçbir alarm yok** (sıfır-FP kanıtı, integration test ile de doğrulanmış).
+6. ✅ `go test ./...` yeşil, `-race` temiz, çekirdek kapsam ≥ %70.
+7. ✅ README: mimari diyagram + tehdit modeli (Engage/ATT&CK) + air-gapped kurulum + demo GIF.
+8. ✅ CI PR'ı bloklayabiliyor; image imzalı + SBOM'lu + Trivy'den geçmiş.
+
+**Bilinçli olarak v0.1 kapsamı dışında bırakılanlar** (bölüm 7, Sprint 3):
+OPS-8 telemetri, OPS-9 mTLS, OPS-10 Helm iskeleti. DoD'de yer almıyorlar;
+kapsam sürünmesine karşı (bölüm 10) v0.2'ye bırakıldı.
+
+### v0.1'den sonra ne oldu
+
+Bu ürünün çekirdeği (`internal/trap`, `internal/correlate`) platformun geri kalanı
+tarafından da kullanılmak üzere ayrı bir modüle çıkarıldı:
+[gokturk-core](https://github.com/GokturkFK/gokturk-core) `v0.1.0`. Bu repo
+kendi kopyalarını kullanmaya devam ediyor — çalışan ve teslim edilmiş bir sürümü
+salt mimari saflık için değiştirmemek adına bilinçli bir karar.
+
+Aktif geliştirme sıradaki üründe: [GÖKKALKAN](https://github.com/GokturkFK/gokkalkan)
+(agentic AI runtime security).
 
 ---
 
