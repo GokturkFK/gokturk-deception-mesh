@@ -45,6 +45,75 @@ def fetch_traps(base_url: str, timeout: float = 5.0) -> list[dict[str, Any]]:
     return resp.json()
 
 
+# --- Cok kaynakli feed (GKO-4) ---
+#
+# Gokturk platformunda birden fazla urun ayni Alert sozlesmesini uretir
+# (hepsi gokturk-core/correlate.Alert kullanir): GOKTURK credential canary
+# alarmlarini, GOKKALKAN agent alarmlarini. Roadmap'in hedefi bunlarin TEK
+# panelde birlesmesi. Sekiller ozdes oldugu icin birlestirme, kaynak etiketi
+# eklemekten ibaret.
+
+# Alarma eklenen, hangi urunden geldigini gosteren anahtar. Alt cizgi ile
+# baslar cunku wire contract'in parcasi DEGIL, panelin kendi ekidir.
+SOURCE_SYSTEM_KEY = "_source_system"
+
+DEFAULT_SOURCE_NAME = "GÖKTÜRK"
+
+
+def parse_sources(raw: str, default_url: str = "") -> list[tuple[str, str]]:
+    """`ad=url` ciftlerinden olusan virgullu listeyi cozer.
+
+    Ornek: "GÖKTÜRK=http://control-api:8080,GÖKKALKAN=http://gokkalkan:8090"
+
+    Ad verilmezse (duz URL) DEFAULT_SOURCE_NAME kullanilir; boylece tek
+    kaynakli eski yapilandirma aynen calismaya devam eder. raw bossa
+    default_url tek kaynak olarak doner.
+    """
+    if not raw.strip():
+        return [(DEFAULT_SOURCE_NAME, default_url)] if default_url else []
+
+    sources: list[tuple[str, str]] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        name, sep, url = chunk.partition("=")
+        if sep:
+            name, url = name.strip(), url.strip()
+        else:
+            name, url = DEFAULT_SOURCE_NAME, chunk
+        if url:
+            sources.append((name, url))
+    return sources
+
+
+def fetch_alerts_multi(
+    sources: list[tuple[str, str]], timeout: float = 5.0
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Birden fazla kaynaktan alarmlari ceker ve tek listede birlestirir.
+
+    Doner: (alarmlar, hatalar). Bir kaynak erisilemezse DIGERLERI yine
+    gosterilir; o kaynagin hatasi `hatalar` sozlugunde adiyla doner.
+    Tek bir urunun cokmesi tum SOC panelini karartmamali.
+
+    Cikti `last_seen` alanina gore en yeni once siralanir; boylece hangi
+    urunden geldigine bakilmaksizin en taze alarm ustte kalir.
+    """
+    merged: list[dict[str, Any]] = []
+    errors: dict[str, str] = {}
+
+    for name, url in sources:
+        try:
+            for alert in fetch_alerts(url, timeout=timeout):
+                alert[SOURCE_SYSTEM_KEY] = name
+                merged.append(alert)
+        except requests.RequestException as exc:
+            errors[name] = str(exc)
+
+    merged.sort(key=lambda a: a.get("last_seen") or "", reverse=True)
+    return merged, errors
+
+
 def format_timestamp(raw: str) -> str:
     """RFC3339 zaman damgasini okunur, kesin bir UTC gosterime cevirir."""
     dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
