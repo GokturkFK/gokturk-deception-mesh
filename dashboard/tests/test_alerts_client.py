@@ -5,8 +5,12 @@ import pytest
 import requests
 
 from alerts_client import (
+    DEFAULT_SOURCE_NAME,
+    SOURCE_SYSTEM_KEY,
     fetch_alerts,
+    fetch_alerts_multi,
     fetch_traps,
+    parse_sources,
     format_timestamp,
     relative_time,
     severity_class,
@@ -112,3 +116,100 @@ def test_summarize_counts_total_open_and_critical():
 
 def test_summarize_empty_list():
     assert summarize([]) == {"total": 0, "open": 0, "critical": 0}
+
+
+# --- Cok kaynakli feed (GKO-4) ---
+
+
+def test_parse_sources_empty_falls_back_to_default_url():
+    assert parse_sources("", "http://control-api:8080") == [
+        (DEFAULT_SOURCE_NAME, "http://control-api:8080")
+    ]
+
+
+def test_parse_sources_empty_and_no_default_returns_nothing():
+    assert parse_sources("", "") == []
+
+
+def test_parse_sources_named_pairs():
+    raw = "GÖKTÜRK=http://control-api:8080,GÖKKALKAN=http://gokkalkan:8090"
+
+    assert parse_sources(raw) == [
+        ("GÖKTÜRK", "http://control-api:8080"),
+        ("GÖKKALKAN", "http://gokkalkan:8090"),
+    ]
+
+
+def test_parse_sources_bare_url_gets_default_name():
+    assert parse_sources("http://control-api:8080") == [
+        (DEFAULT_SOURCE_NAME, "http://control-api:8080")
+    ]
+
+
+def test_parse_sources_ignores_blank_chunks_and_trims():
+    raw = " A=http://a , , B=http://b ,"
+
+    assert parse_sources(raw) == [("A", "http://a"), ("B", "http://b")]
+
+
+@patch("alerts_client.requests.get")
+def test_fetch_alerts_multi_merges_and_tags_source(mock_get):
+    def side_effect(url, timeout=5.0):
+        if "control-api" in url:
+            return _fake_response([{"source": "10.0.0.1", "last_seen": "2026-08-12T10:00:00Z"}])
+        return _fake_response([{"source": "agent-1", "last_seen": "2026-08-12T12:00:00Z"}])
+
+    mock_get.side_effect = side_effect
+
+    alerts, errors = fetch_alerts_multi(
+        [("GÖKTÜRK", "http://control-api:8080"), ("GÖKKALKAN", "http://gokkalkan:8090")]
+    )
+
+    assert errors == {}
+    assert len(alerts) == 2
+    # En yeni once siralanmali (urunden bagimsiz)
+    assert alerts[0]["source"] == "agent-1"
+    assert alerts[0][SOURCE_SYSTEM_KEY] == "GÖKKALKAN"
+    assert alerts[1][SOURCE_SYSTEM_KEY] == "GÖKTÜRK"
+
+
+@patch("alerts_client.requests.get")
+def test_fetch_alerts_multi_one_source_down_others_still_shown(mock_get):
+    """Bir urunun cokmesi tum SOC panelini karartmamali."""
+
+    def side_effect(url, timeout=5.0):
+        if "gokkalkan" in url:
+            raise requests.ConnectionError("baglanti reddedildi")
+        return _fake_response([{"source": "10.0.0.1", "last_seen": "2026-08-12T10:00:00Z"}])
+
+    mock_get.side_effect = side_effect
+
+    alerts, errors = fetch_alerts_multi(
+        [("GÖKTÜRK", "http://control-api:8080"), ("GÖKKALKAN", "http://gokkalkan:8090")]
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0][SOURCE_SYSTEM_KEY] == "GÖKTÜRK"
+    assert "GÖKKALKAN" in errors
+    assert "baglanti reddedildi" in errors["GÖKKALKAN"]
+
+
+@patch("alerts_client.requests.get")
+def test_fetch_alerts_multi_all_sources_down(mock_get):
+    mock_get.side_effect = requests.ConnectionError("down")
+
+    alerts, errors = fetch_alerts_multi([("A", "http://a"), ("B", "http://b")])
+
+    assert alerts == []
+    assert set(errors) == {"A", "B"}
+
+
+@patch("alerts_client.requests.get")
+def test_fetch_alerts_multi_handles_missing_last_seen(mock_get):
+    """last_seen olmayan alarm siralamayi patlatmamali."""
+    mock_get.return_value = _fake_response([{"source": "x"}, {"source": "y", "last_seen": "2026-08-12T12:00:00Z"}])
+
+    alerts, errors = fetch_alerts_multi([("A", "http://a")])
+
+    assert errors == {}
+    assert [a["source"] for a in alerts] == ["y", "x"]
