@@ -82,6 +82,21 @@ Detay için [deployments/docker/docker-compose.yml](deployments/docker/docker-co
 > Panel: http://localhost:8501 — `GET /api/v1/alerts`'i 3 sn'de bir çeker.
 > `sensor-ssh`, `/var/log/auth.log`'u salt-okunur bağlar (Debian/Ubuntu formatı varsayılır).
 
+#### Panelde birden fazla ürün (GKO-4)
+
+Panel, aynı `Alert` sözleşmesini konuşan diğer Göktürk ürünlerinin alarmlarını
+**aynı feed'de** gösterebilir. `.env`'de `ALERT_SOURCES` doldurulur, panelde
+kod değişikliği gerekmez:
+
+```sh
+ALERT_SOURCES=GÖKTÜRK=http://control-api:8080,GÖKKALKAN=http://host.docker.internal:8090,GÖKZİNCİR=http://host.docker.internal:8100
+```
+
+URL'ler **panel konteynerinin içinden** çözülebilir olmalı: aynı compose
+ağındaki bir servis için servis adı (`control-api`), ayrı bir stack'te
+çalışan ürün için `host.docker.internal` + host portu. Boş bırakılırsa
+davranış değişmez, yalnızca `CONTROL_API_URL` kullanılır.
+
 ### Demo akışı (DoD)
 
 ```sh

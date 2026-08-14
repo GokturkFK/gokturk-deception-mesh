@@ -92,8 +92,21 @@ services:
       dockerfile: deployments/docker/dashboard.Dockerfile
     environment:
       CONTROL_API_URL: http://control-api:8080
+      # GKO-4 coklu kaynak: panel birden fazla urunun alarmini ayni feed'de
+      # gosterebiliyor ama compose bu degeri HIC gecirmiyordu — ucuncu bir
+      # urunu (GOKZINCIR) beslemek icin compose dosyasini elle duzenlemek
+      # gerekiyordu. Bos birakilirsa davranis degismez: yalnizca
+      # CONTROL_API_URL kullanilir.
+      #   ALERT_SOURCES="GOKTURK=http://control-api:8080,GOKZINCIR=http://host.docker.internal:8100"
+      ALERT_SOURCES: ${ALERT_SOURCES:-}
     ports:
       - "8501:8501"
+    extra_hosts:
+      # Panel konteynerinden host'ta ayri ayaga kalkan urunlere (GOKKALKAN
+      # 8090, GOKZINCIR 8100) erisebilmek icin. Linux'ta bu ad varsayilan
+      # olarak cozulmez; Docker Desktop'ta zaten var, tekrar tanimlamak
+      # zararsiz.
+      - "host.docker.internal:host-gateway"
     depends_on:
       control-api:
         condition: service_healthy
