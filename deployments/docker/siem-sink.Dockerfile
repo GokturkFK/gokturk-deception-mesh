@@ -6,6 +6,6 @@
 # hic baslamamasina yol acardi. Build context: repo koku.
 
 FROM alpine:3.20
-RUN apk add --no-cache socat
+RUN apk upgrade --no-cache && apk add --no-cache socat
 
 CMD ["sh", "-c", "echo 'siem-sink: udp/514 dinleniyor (CEF demo alicisi)' && exec socat -u UDP-RECVFROM:514,fork,reuseaddr -"]
