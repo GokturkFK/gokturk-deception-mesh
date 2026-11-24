@@ -1,156 +1,164 @@
+<div align="center">
+
 # Göktürk Deception Mesh
 
-**MVP v0.1 tamamlandı** — [Definition of Done](PROJECT%20PLAN.md#8-definition-of-done-mvp-v01)'ın
-8 maddesi de karşılandı. Görev dökümü ve mimari: [PROJECT PLAN.md](PROJECT%20PLAN.md).
+**Air-Gapped, Zero-False-Positive Credential Canary Platform (Göktürk Platform P1)**
 
-Çekirdek sözleşme ve korelasyon motoru ayrı bir modüle çıkarıldı:
-[gokturk-core](https://github.com/GokturkFK/gokturk-core). Aktif geliştirme
-sıradaki üründe: [GÖKKALKAN](https://github.com/GokturkFK/gokkalkan).
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+[![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?style=flat-square&logo=natsdotio&logoColor=white)](https://nats.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Storage-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Streamlit](https://img.shields.io/badge/SOC%20UI-Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Status](https://img.shields.io/badge/MVP-v0.1%20Complete-22c55e?style=flat-square)](PROJECT%20PLAN.md)
+[![Org](https://img.shields.io/badge/Org-GokturkFK-0d1117?style=flat-square)](https://github.com/GokturkFK)
 
-**Tek cümlelik hedef:** Bir güvenlik ekibi bir _credential canary_ (honeytoken) eker; bir
-saldırgan onu kullanır; saniyeler içinde SOC panelinde ve SIEM'de **sıfır-false-positive**,
-yüksek-kesinlikli bir alarm belirir — hepsi air-gapped, `docker compose up` ile ayağa kalkan
-bir yığın üzerinde.
+*Plant a credential canary (honeytoken), detect attacker usage in ≤5 seconds with zero false positives, correlate campaigns automatically, and fan out to SOC & SIEM—all on a single air-gapped `docker compose up` stack.*
 
-Tehdit modeli ve çerçeve eşlemesinin ayrıntısı: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+</div>
 
-![Demo: canary tetiklenince saniyeler içinde High, tekrarında Critical alarm](docs/demo.gif)
+---
 
-*Canlı `docker compose up` akışından: bir canary provision edilir, sahte bir SSH
-girişi tetiklenir (≤5 sn'de High alarm), aynı kaynaktan ikinci deneme tek bir
-Critical alarma birleşir (kampanya korelasyonu).*
+## Demo
 
-## Mimari
+![Demo: canary triggered produces High alert within seconds, repeat attempt merges into Critical campaign alert](docs/demo.gif)
 
-Modüler monolit (`control-api`: ingestion + korelasyon + alarm + HTTP API tek binary) +
-bağımsız `sensor-ssh`; olay veriyolu NATS JetStream. Uçtan uca akış:
+*Captured on a live `docker compose up` stack: a credential canary is provisioned, a simulated SSH login triggers a **High** alert in ≤5 seconds, and a second attempt from the same source merges into a single **Critical** campaign alert.*
+
+---
+
+## Overview
+
+**Göktürk Deception Mesh** is Pillar 1 (P1) of the Göktürk Security Platform. Its shared trap contract and deterministic correlation engine live in [`gokturk-core`](https://github.com/GokturkFK/gokturk-core), enabling seamless alert federation alongside [`gokkalkan`](https://github.com/GokturkFK/gokkalkan) (P2) and [`gokzincir`](https://github.com/GokturkFK/gokzincir) (P3).
+
+**Zero-FP by Construction:** The correlation engine intentionally avoids ML anomaly scoring. Every alert stems strictly from a deterministic canary match (`Decode` → known `trap_id`):
+- **1 trip** → `High` alert
+- **≥2 trips from the same source** → merged into a single `Critical` campaign alert
+
+Full threat model and framework mappings: [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) · Project plan & Definition of Done: [`PROJECT PLAN.md`](PROJECT%20PLAN.md).
+
+---
+
+## Architecture
+
+A modular monolith (`control-api`: provisioning + ingestion + correlation + alerting + HTTP API in one binary) paired with a lightweight `sensor-ssh` agent over **NATS JetStream**:
 
 ```mermaid
 flowchart LR
-  attacker([Saldırgan]):::bad -->|çalınan svc_ canary ile SSH| target[Hedef host]
+  attacker([Attacker]):::bad -->|SSH login with stolen svc_ canary| target[Target Host]
   target -->|/var/log/auth.log| sensor[sensor-ssh<br/>tail + Decode]
   sensor -->|TripEvent JSON<br/>trip.events.v1| nats[(NATS JetStream<br/>TRIPS stream)]
   nats --> ingest[control-api<br/>ingest consumer]
-  ingest -->|idempotent yaz| pg[(PostgreSQL<br/>traps / trip_events / alerts)]
-  ingest --> corr[korelasyon<br/>Evaluate]
-  corr -->|alarm| pg
-  corr --> fanout[bildirim fan-out]
+  ingest -->|idempotent write| pg[(PostgreSQL<br/>traps / trip_events / alerts)]
+  ingest --> corr[correlation<br/>Evaluate]
+  corr -->|alert| pg
+  corr --> fanout[notification fan-out]
   fanout --> siem[siem-sink<br/>syslog CEF]
   fanout --> tg[Telegram]
   fanout --> wh[Webhook]
-  operator([SOC operatörü]):::ok -->|canary provision| api[control-api HTTP API]
+  operator([SOC Operator]):::ok -->|provision canary| api[control-api HTTP API]
   api --> pg
   dash[dashboard<br/>Streamlit] -->|GET /api/v1/alerts| api
-  sensor -.->|GET /api/v1/traps<br/>canary çözümleme| api
+  sensor -.->|GET /api/v1/traps<br/>canary resolution| api
   classDef bad fill:#7f1d1d,color:#fff,stroke:#b91c1c;
   classDef ok fill:#14532d,color:#fff,stroke:#16a34a;
 ```
 
-| Bileşen | Sahip | Sorumluluk |
-|---|---|---|
-| `sensor-ssh` | Cyber | `auth.log` tailer → `ParseAuthLine` → `Decode`; yalnızca bilinen canary → `TripEvent` publish (canary değilse `ErrNotATrip`, hiçbir şey yayınlanmaz) |
-| `control-api` | Cyber | Tuzak provisioning API + `trip.events.v1` ingestion + korelasyon + alarm persist + fan-out |
-| `nats` | DevOps | JetStream veriyolu (`TRIPS` stream, `trip.events.v1`) |
-| `postgres` | DevOps | `traps` / `trip_events` / `alerts` |
-| `dashboard` | Cyber | Streamlit SOC paneli, `GET /api/v1/alerts` besleme |
-| `siem-sink` | DevOps | Demo syslog CEF alıcısı |
+### Components
 
-**Sıfır-FP by construction:** korelasyonda bilinçli olarak ML/anomali yoktur; alarm yalnızca
-_kesin bir canary eşleşmesinden_ (`Decode` → bilinen `trap_id`) doğar. Kural: tek trip → **High**,
-aynı kaynaktan ≥2 trip → tek **Critical** (kampanya birleşmesi).
+| Component | Responsibility |
+| :--- | :--- |
+| **`sensor-ssh`** | Tails `auth.log`, runs `ParseAuthLine` → `Decode`; publishes `TripEvent` only for known canaries (`ErrNotATrip` drops all legitimate noise). |
+| **`control-api`** | Trap provisioning HTTP API, `trip.events.v1` JetStream consumer, campaign correlation, PostgreSQL persistence, and alert fan-out. |
+| **`nats`** | NATS JetStream event bus (`TRIPS` stream, `trip.events.v1` subject). |
+| **`postgres`** | Durable storage for `traps`, `trip_events`, and `alerts`. |
+| **`dashboard`** | Multi-source Streamlit SOC dashboard consuming `GET /api/v1/alerts` (configurable via `ALERT_SOURCES` to federate P1 + P2 + P3). |
+| **`siem-sink`** | Reference Syslog CEF receiver for SIEM integration demos. |
 
-## Geliştirme
+---
 
-```sh
-cp deployments/docker/.env.example deployments/docker/.env   # değerleri doldur
-make build
-make test
-make lint
-```
+## Getting Started
 
-## Stack'i ayağa kaldırma
+### Prerequisites
+
+- **Go 1.25+**
+- **Docker** & **Docker Compose v2+**
+
+### Run the Full Stack
 
 ```sh
+cp deployments/docker/.env.example deployments/docker/.env   # fill in credentials
 make docker-up
 ```
 
-Servisler: `control-api`, `sensor-ssh`, `nats`, `postgres`, `dashboard`, `siem-sink`.
-Detay için [deployments/docker/docker-compose.yml](deployments/docker/docker-compose.yml).
+Brings up all 6 services (`control-api`, `sensor-ssh`, `nats`, `postgres`, `dashboard`, `siem-sink`). See [`deployments/docker/docker-compose.yml`](deployments/docker/docker-compose.yml) for port and environment configuration.
 
-> `make docker-up` altı servisi de ayağa kaldırır: `nats` + `postgres` + `siem-sink` +
-> `control-api` + `dashboard` + `sensor-ssh`.
-> Panel: http://localhost:8501 — `GET /api/v1/alerts`'i 3 sn'de bir çeker.
-> `sensor-ssh`, `/var/log/auth.log`'u salt-okunur bağlar (Debian/Ubuntu formatı varsayılır).
+- **Dashboard:** http://localhost:8501 — polls `GET /api/v1/alerts` every 3 seconds.
+- `sensor-ssh` mounts `/var/log/auth.log` read-only (Debian/Ubuntu format assumed).
 
-#### Panelde birden fazla ürün (GKO-4)
+### Multi-Product Dashboard (GKO-4)
 
-Panel, aynı `Alert` sözleşmesini konuşan diğer Göktürk ürünlerinin alarmlarını
-**aynı feed'de** gösterebilir. `.env`'de `ALERT_SOURCES` doldurulur, panelde
-kod değişikliği gerekmez:
+The dashboard can show alerts from every Göktürk product that speaks the same `Alert` contract in a **single feed** — no dashboard code changes required, just set `ALERT_SOURCES` in `.env`:
 
 ```sh
 ALERT_SOURCES=GÖKTÜRK=http://control-api:8080,GÖKKALKAN=http://host.docker.internal:8090,GÖKZİNCİR=http://host.docker.internal:8100
 ```
 
-URL'ler **panel konteynerinin içinden** çözülebilir olmalı: aynı compose
-ağındaki bir servis için servis adı (`control-api`), ayrı bir stack'te
-çalışan ürün için `host.docker.internal` + host portu. Boş bırakılırsa
-davranış değişmez, yalnızca `CONTROL_API_URL` kullanılır.
+URLs must be resolvable **from inside the dashboard container**: use the service name (`control-api`) for services on the same Compose network, or `host.docker.internal` + host port for products running in a separate stack. If left empty, behavior is unchanged and only `CONTROL_API_URL` is used.
 
-### Demo akışı (DoD)
+### Demo Flow (Definition of Done)
 
 ```sh
-# 1) Bir canary provision et — dönen "username" svc_ ile başlar, "secret" bir kez döner.
-#    APP-3: .env'de OPERATOR_TOKEN ayarlıysa provision o token'ı ister (yoksa 401).
+# 1) Provision a canary — the returned "username" starts with svc_, "secret" is returned once.
+#    APP-3: if OPERATOR_TOKEN is set in .env, provisioning requires that token (otherwise 401).
 curl -s -XPOST http://localhost:8080/api/v1/traps \
   -H "Authorization: Bearer $OPERATOR_TOKEN" | tee /tmp/canary.json
 
-# 2) O kullanıcı adıyla sahte bir SSH login satırını auth.log'a düşür (attacker simülasyonu)
+# 2) Write a fake SSH login line for that username into auth.log (attacker simulation)
 U=$(jq -r .username /tmp/canary.json)
 logger -p auth.info "sshd[1]: Failed password for $U from 203.0.113.7 port 40012 ssh2"
 
-# 3) ≤5 sn içinde panelde High alarm + siem-sink'te CEF kaydı
+# 3) Within ≤5 s: High alert on the dashboard + CEF record in siem-sink
 docker compose -f deployments/docker/docker-compose.yml logs siem-sink
 ```
 
-Canary olmayan bir kullanıcıyla login → **hiçbir alarm yok** (sıfır-FP kanıtı).
+A login with a non-canary user → **no alert at all** (zero-FP proof).
 
-### Otomatik tuzak dağıtımı (seeding)
+### Automated Trap Seeding
 
-Yukarıdaki adım 1-2'yi elle yapmak yerine, `cmd/seeder` "inandırıcı" bir kimlik üretip
-gerçek bir hedef sunucuya SSH ile yerleştirir (hesap + parola + geriye tarihlenmiş home
-dizini). Detay ve tam sözleşme: [docs/SEEDING.md](docs/SEEDING.md).
+Instead of doing steps 1–2 by hand, `cmd/seeder` generates a believable identity and plants it on a real target server over SSH (account + password + back-dated home directory). Details and full contract: [`docs/SEEDING.md`](docs/SEEDING.md).
 
-### Air-gapped kurulum
+### Air-Gapped Installation
 
-Bu repo'nun "air-gapped" iddiası (yukarıdaki tek cümlelik hedefte geçen) sadece lafta
-değil: `deployments/airgapped/build-bundle.sh` tüm servis imajlarını `docker save` ile
-tek bir arşive paketler; hedefteki `install.sh` bunu **hiçbir `docker pull`/`build`
-çağırmadan** ayağa kaldırır. CI'da gerçekten test edilir — bundle oluşturulup yerel
-imajlar silinir, kurulumun SADECE bundle'dan çalıştığı doğrulanır (bkz.
-`.github/workflows/ci.yml`, `airgapped-bundle` job'u). Adım adım:
-[deployments/airgapped/README.md](deployments/airgapped/README.md).
+The air-gapped claim is not just marketing: `deployments/airgapped/build-bundle.sh` packages every service image into a single archive with `docker save`; the target-side `install.sh` brings the stack up **without any `docker pull` / `build`**. This is genuinely tested in CI — the bundle is built, local images are deleted, and the install is verified to work *only* from the bundle (see the `airgapped-bundle` job in `.github/workflows/ci.yml`). Step by step: [`deployments/airgapped/README.md`](deployments/airgapped/README.md).
 
-## Migration'lar
+### Development & Testing
+
+```sh
+make build
+make test
+make lint
+```
+
+### Migrations
 
 ```sh
 make migrate-up
 make migrate-down
 ```
 
-Şema taslak — bkz. [migrations/00001_init.sql](migrations/00001_init.sql) başındaki not.
+Schema draft — see the note at the top of [`migrations/00001_init.sql`](migrations/00001_init.sql).
 
-## Branch & PR kuralları
+---
 
-`main` korumalı:
-- Direkt push yok (repo sahibi dahil) — her değişiklik PR ile gelir.
-- Merge öncesi tüm zorunlu CI kontrolleri yeşil olmalı: `Build, vet, test`, `golangci-lint`,
-  `Docker build (control-api)`, `Dashboard tests (pytest)`, `Docker build (dashboard)`.
-- Onay (approval) şart değil — CI yeşilse PR sahibi tek başına merge edebilir.
-- Force-push ve branch silme main'de kapalı; linear history zorunlu (merge yalnızca **squash**).
-- PR merge olunca kaynak branch otomatik silinir.
+## Branch & PR Rules
 
-Branch adlandırma, plan görev ID'sine bağlı:
+`main` is protected:
+- No direct pushes (including the repo owner) — every change comes via PR.
+- All required CI checks must be green before merge: `Build, vet, test`, `golangci-lint`, `Docker build (control-api)`, `Dashboard tests (pytest)`, `Docker build (dashboard)`.
+- Approval is not required — if CI is green, the PR author may merge.
+- Force-push and branch deletion are disabled on `main`; linear history enforced (**squash** merges only).
+- Source branches are deleted automatically after merge.
+
+Branch names are tied to plan task IDs (`APP-*` = Cyber, `OPS-*` = DevOps; see [`PROJECT PLAN.md`](PROJECT%20PLAN.md) §5–6):
 
 ```
 feature/APP-2-trap-provisioning
@@ -158,4 +166,19 @@ fix/OPS-3-ci-gofiles-guard
 chore/OPS-1-repo-scaffold
 ```
 
-`APP-*` = Cyber, `OPS-*` = DevOps (bkz. [PROJECT PLAN.md](PROJECT%20PLAN.md) böl. 5-6).
+---
+
+## Göktürk Security Platform
+
+| Pillar | Repository | Focus |
+| :---: | :--- | :--- |
+| **Core** | [**`gokturk-core`**](https://github.com/GokturkFK/gokturk-core) | Frozen `trap` wire contract & deterministic `correlate` engine |
+| **P1** | **`gokturk-deception-mesh`** *(this repo)* | Credential canaries, SSH sensor, NATS JetStream & unified SOC dashboard |
+| **P2** | [**`gokkalkan`**](https://github.com/GokturkFK/gokkalkan) | Agentic AI runtime security — MCP egress proxy & agent honeypot |
+| **P3** | [**`gokzincir`**](https://github.com/GokturkFK/gokzincir) | Non-Human Identity (NHI) governance & blast-radius graph |
+
+---
+
+<div align="center">
+  <sub>Developed by <a href="https://github.com/GokturkFK">GokturkFK</a> · <a href="CODEOWNERS">CODEOWNERS</a></sub>
+</div>
